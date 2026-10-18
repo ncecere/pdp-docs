@@ -1,0 +1,78 @@
+---
+title: Release notes v0.1.1
+description: "Pi Durable Platform v0.1.1 (2026-10-18), a fix release on top of v0.1.0: what changed, upgrading, the images and verifying them."
+---
+
+Pi Durable Platform v0.1.1, released on 2026-10-18, is a fix release on top of [v0.1.0](/docs/releases/v0-1-0). It brings small console fixes found while preparing these docs and their screenshots, `doctor` checking the agents database, a read-only console path for platform staff to any team's agents, and the product's logo. It has **no database migrations** (still migration 16) and **no configuration changes**.
+
+## What changed
+
+### Added
+
+- **`doctor` checks the agents database.** It connects to `AGENTS_DATABASE_URL` and checks that its role can provision agents: PostgreSQL 16 or later, `CREATEROLE`, and `CREATE` on the database. Skipped without an agents database; reported as info when `AGENTS_CREATE_DATABASE` will create it. See [Doctor and health checks](/docs/operate/doctor-and-health#the-agents-database-checks).
+- **Platform staff read any team's agents.** Platform admins and auditors see every team's agents read-only (`GET /v1/teams/{team}/agents`, `GET /v1/agents/{id}`), not only personal workspaces'. **Admin › Teams** › a team has an **Agents** tab linking to each agent's page: **Overview** and **Settings**, **Conversations** for platform admins (reading one still takes a reason), and no **Test**. See [People and teams](/docs/administer/people-and-teams#manage-a-team).
+- **The product's logo, "Wake".** The sidebar, the sign-in page and the session-unavailable page show Pi Durable Platform's mark when the instance has no logo of its own (`UI_LOGO_URL` still replaces it). The favicon is the mark, with a `favicon.ico` and an `apple-touch-icon.png`.
+
+<Screenshot slot="admin-team-agents" />
+
+### Changed
+
+- **Staff can't hibernate other teams' agents.** In v0.1.0 platform staff could hibernate a personal workspace's agent (`POST /v1/agents/{id}/hibernate`). Now only the agent's team can, and staff get 403. Staff access to agents is read-only everywhere.
+
+### Fixed
+
+- Sign-in: the **Help signing in** link uses the app's link colour.
+- Home: the **Agents** card no longer shows an empty strip; it links to **All agents** and the **Catalog**.
+- Admin › Models and MCP servers: the **Owner** filter's chevron no longer overlaps its text (every small select).
+- Admin › Templates: the review queue (**Waiting for review**) and the full list (**Every template**) each have a heading, and the queue's table a name.
+- Admin › Settings › Private networks: the example placeholder shows only while no network is listed.
+- Audit log: every action the platform records has a label (agents, templates, model providers, models, MCP servers, connected apps, team provider settings), with areas in the filter and target type names. See [Audit log](/docs/administer/audit-log).
+- Platform admins' conversation list says **Title hidden** for a withheld title instead of "Private conversation". Shared threads in personal workspaces and of service-managed agents are withheld too; **Visibility** says who sees the thread. See [Reading conversations](/docs/administer/reading-conversations).
+- Agent Test chat: the header's Shared icon stays on the line with its word.
+
+The full list is in the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.1.1/CHANGELOG.md) and its [release notes](https://github.com/ncecere/pi-durable-platform/blob/v0.1.1/docs/releases/v0.1.1.md).
+
+## Upgrading from v0.1.0
+
+Replace both images, the platform and the runtime, by digest, and restart. There are no migrations and no new settings. Then run `pi-durable-platform doctor`: it now also checks the agents database. See [Upgrades and migrations](/docs/operate/upgrades).
+
+If you scripted hibernating agents as a platform admin who isn't on the agent's team, give that job a key of the agent's team instead: staff now get 403.
+
+## Images
+
+| Image | |
+|---|---|
+| `ghcr.io/ncecere/pi-durable-platform:v0.1.1` | The platform: distroless, user 65532, read-only root filesystem |
+| `ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.1` | The agent runtime: Node.js 22, user 10001, read-only root filesystem with a writable `/tmp` |
+
+Both are tagged `v0.1.1` and `latest`, for linux/amd64 and linux/arm64. Deploy by digest:
+
+```text
+ghcr.io/ncecere/pi-durable-platform@sha256:ef046ad6534aa056adf0f10b1a9e41d5e93793e17e911b8cefab750dd909b147
+ghcr.io/ncecere/pi-durable-platform-runtime@sha256:a7adb0c5f7913ff2f2ffd7783301f81d23caeeceb8d68abd48838e178d9d1168
+```
+
+The digests are also on the [GitHub release](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.1), in its `<image>-v0.1.1.digest.txt` assets.
+
+## Verifying the images
+
+Verify the signatures with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) **v3.0 or newer** (keyless, GitHub Actions OIDC):
+
+```sh
+cosign verify ghcr.io/ncecere/pi-durable-platform@sha256:ef046ad6534aa056adf0f10b1a9e41d5e93793e17e911b8cefab750dd909b147 \
+  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.1.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+cosign verify ghcr.io/ncecere/pi-durable-platform-runtime@sha256:a7adb0c5f7913ff2f2ffd7783301f81d23caeeceb8d68abd48838e178d9d1168 \
+  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.1.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Each image carries its SBOM (SPDX) and build provenance as attestations, and the release has each image's SBOM per platform with `checksums.txt`. `pi-durable-platform version` prints `pi-durable-platform 0.1.1 (<commit>)`; the runtime image is labelled `org.opencontainers.image.version=0.1.1`.
+
+## Known limitations
+
+Unchanged from [v0.1.0](/docs/releases/v0-1-0#known-limitations). The project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) plans each one, and each has a GitHub issue with the [`roadmap` label](https://github.com/ncecere/pi-durable-platform/issues?q=is%3Aissue+label%3Aroadmap).
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/pi-durable-platform/issues](https://github.com/ncecere/pi-durable-platform/issues). Report security problems privately, as the repository's [SECURITY.md](https://github.com/ncecere/pi-durable-platform/blob/v0.1.1/SECURITY.md) describes.

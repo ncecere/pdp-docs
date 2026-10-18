@@ -2,7 +2,15 @@ import Link from 'next/link';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { BookOpen, Braces, Code2, MessageSquare, Server, ShieldCheck, Tag, Users } from 'lucide-react';
 import { PdpWordmark } from '@/components/logo';
-import { piUrl, productReleaseDate, productRepo, productSite, productVersion } from '@/lib/site';
+import {
+  piUrl,
+  productReleaseDate,
+  productRepo,
+  productRoadmapIssuesUrl,
+  productRoadmapUrl,
+  productSite,
+  productVersion,
+} from '@/lib/site';
 
 const sections = [
   {
@@ -56,7 +64,7 @@ const sections = [
     title: 'Releases',
     href: '/docs/releases',
     icon: <Tag />,
-    description: `What is in ${productVersion}, the first release, from ${productReleaseDate}.`,
+    description: `What changed in ${productVersion}, from ${productReleaseDate}, what v0.1.0 brought, and how to upgrade.`,
   },
 ];
 
@@ -112,8 +120,16 @@ export default function HomePage() {
       </Cards>
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
-        Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, its
-        first release, from {productReleaseDate}. It is an independent project that runs agents built with
+        Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, a fix
+        release from {productReleaseDate} on top of the first release, v0.1.0. What comes next is in the{' '}
+        <a className="text-brand-link underline" href={productRoadmapUrl}>
+          roadmap
+        </a>{' '}
+        and its{' '}
+        <a className="text-brand-link underline" href={productRoadmapIssuesUrl}>
+          issues
+        </a>
+        . It is an independent project that runs agents built with
         Pi; it is not part of Pi and is not affiliated with Pi&apos;s authors. More about the project is on{' '}
         <a className="text-brand-link underline" href={productSite}>
           its website

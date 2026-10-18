@@ -42,10 +42,10 @@ An agent has these tabs:
 
 - **Overview**: its status (running now or hibernated, turned off), template and version, model, tools (the MCP servers it can call), storage, its usage over the last 30 days, and **Use it from your app** with example requests.
 - **Test**: a chat with it ([Testing an agent](/docs/use/test-chat)).
-- **Conversations**: only for platform staff ([Reading conversations](/docs/administer/reading-conversations)).
+- **Conversations**: only for platform admins ([Reading conversations](/docs/administer/reading-conversations)).
 - **Settings**: name, description and model; turning it off; deleting it.
 
-While the agent is running, its page header has **Hibernate**, which stops its runtime now; the next request wakes it. Any member can use it.
+While the agent is running, its page header has **Hibernate**, which stops its runtime now; the next request wakes it. Any member can use it; platform staff who aren't on the team can't (since v0.1.1).
 
 <Screenshot slot="agent-overview" />
 

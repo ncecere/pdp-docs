@@ -22,15 +22,14 @@ Conversations themselves aren't in the log.
 
 ## Reading an entry
 
-Each entry says **who** acted and **how**: a person in the browser, a person with an API key (and its name), a person through a connected app (and the app's name), a service account (and the key's name), or the system. It names the target (with its current name, or its last known name if it was deleted), and **View details** shows the fields before and after the change, and the request ID.
+Each entry has a label, such as **Deployed agent** or **Added template version** (since v0.1.1 every action has one), and says **who** acted and **how**: a person in the browser, a person with an API key (and its name), a person through a connected app (and the app's name), a service account (and the key's name), or the system. It names the target (with its current name, or its last known name if it was deleted), and **View details** shows the fields before and after the change, and the request ID.
 
 ## Filters
 
-- **Action**: an area (all agent changes, all member changes) or one exact action.
+- **Area**: an area (Agents, Templates, Team and members, Service accounts, Model providers, Models, MCP servers, Conversations) or, by typing, one exact action.
 - **Person**: one person's entries, including their API keys and connected apps.
-- **Target** and date range.
-- **Hide sign-ins**.
+- **Date** range.
 
 ## A platform admin read a conversation
 
-An entry **Read a private conversation** means a platform admin opened one of the team's conversations, or one in your personal workspace. It names the admin, the thread, whether it was private, and the **Reason** they gave. Platform admins can't read a conversation without leaving this entry. See [Reading conversations](/docs/administer/reading-conversations).
+An entry **Read a private conversation** (or **Read a team conversation**, for a shared one) means a platform admin opened one of the team's conversations, or one in your personal workspace. It names the admin, the thread, whether it was private, and the **Reason** they gave. Platform admins can't read a conversation without leaving this entry. See [Reading conversations](/docs/administer/reading-conversations).

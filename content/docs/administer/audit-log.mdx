@@ -9,17 +9,20 @@ description: "Pi Durable Platform's platform-wide audit log for admins and audit
 
 ## What's recorded
 
+Every action has a label in the log (since v0.1.1, agents, templates, model providers, models, MCP servers, connected apps and team provider settings too, which v0.1.0 showed as codes such as "Agent: create"). The table gives each **Area** of the filter and its action codes.
+
 | Area | Actions (examples) |
 |---|---|
-| Sign-in | `auth.login`, `auth.logout`, `auth.login_denied` (a suspended person) |
+| Sign-in | `auth.login` (Signed in), `auth.logout`, `auth.login_denied` (Sign-in denied: a suspended person) |
 | People | `platform.user_role_change`, `platform.user_suspend`, `platform.user_reactivate`, `platform.bootstrap_role` |
 | Teams | `team.create`, `team.update`, `team.archive`, `team.owner_assign`, `team.member_*`, `team.invite_*`, `team.personal_create`, `team.personal_limits` |
 | Keys and service accounts | `api_key.*`, `service_account.*`, `service_account_key.*`, and `*.pepper_rehash` after a pepper rotation |
-| Templates and agents | `agent_template.*` (create, version, publish request, approve, reject, unpublish), `agent.create`, `agent.update`, `agent.delete` |
-| Models and MCP servers | `model_provider.*`, `model.*`, `mcp_server.*`, `platform.model_settings` |
-| Settings | `platform.personal_settings`, `oauth.trusted_clients_update` |
-| OAuth Connect | `oauth.consent`, `oauth.token_issue`, `oauth.revoke` (reason `user`, `admin`, `client` or `refresh_reuse`), `oauth.client_register` |
-| Conversations | `thread.admin_read`: a platform admin read a conversation, with the reason |
+| Agents | `agent.create` (Deployed agent), `agent.update` (Changed agent), `agent.delete` (Deleted agent) |
+| Templates | `agent_template.*`: Created template, Added template version, Asked to publish template, Approved / Rejected template for the catalog, Removed template from the catalog |
+| Model providers, Models, MCP servers | `model_provider.*`, `model.*`, `mcp_server.*` (Added, Changed, Deleted …) |
+| Platform and users (settings) | `platform.personal_settings` (Changed personal workspace defaults), `platform.model_settings` (Changed team provider and MCP server settings) |
+| Connected apps | `oauth.consent` (Connected app), `oauth.token_issue` (Issued app token), `oauth.revoke` (Revoked app access; reason `user`, `admin`, `client` or `refresh_reuse`), `oauth.client_register` (Registered app), `oauth.trusted_clients_update` (Changed trusted apps) |
+| Conversations | `thread.admin_read` (Read a private conversation, or Read a team conversation): a platform admin read a conversation, with the reason |
 
 Conversations themselves are never in the log.
 
@@ -29,7 +32,7 @@ Each entry has an actor: a **person**, a **service account**, or the **system**.
 
 ## Filters and details
 
-Filter by **Action** (an area, or type an exact action), **Person**, **Target type**, date range, and **Hide sign-ins**. Open an entry for its target, the fields before and after, the metadata (for a conversation read, the **Reason**), the **Request ID** and the client's address. **Export CSV** downloads the filtered log.
+Filter by **Area** (an area, or type to find an exact action by its label), **Target type** (Agent, Template, Model provider, Model, MCP server, App, App connection, Trusted apps, Service account, Conversation and so on), **Person**, date range, and **Hide sign-ins**. Open an entry for its target, the fields before and after, the metadata (for a conversation read, the **Reason**), the **Request ID** and the client's address. **Export CSV** downloads the filtered log.
 
 The request ID is also in the `X-Request-ID` response header and the platform's logs, so you can follow one request across both.
 

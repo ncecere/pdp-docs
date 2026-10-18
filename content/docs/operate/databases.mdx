@@ -34,6 +34,8 @@ CREATE ROLE pdp_agents_admin LOGIN CREATEROLE PASSWORD '...';
 CREATE DATABASE pdp_agents OWNER pdp_agents_admin;
 ```
 
+`pi-durable-platform doctor` checks this setup: that the agents database answers, runs PostgreSQL 16 or later, and that the role in `AGENTS_DATABASE_URL` has `CREATEROLE` and `CREATE` on it. See [Doctor and health checks](/docs/operate/doctor-and-health#the-agents-database-checks).
+
 At start-up the platform hardens this database once: `PUBLIC` loses all rights on schema `public` and the right to create temporary tables. Making the provisioning role the database's owner gives it the rights to do that.
 
 For each agent it then creates:

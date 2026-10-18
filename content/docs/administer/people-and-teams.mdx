@@ -9,14 +9,14 @@ description: Managing users, platform roles and suspension, creating and archivi
 
 People appear the first time they sign in. You can't create them; you can add someone to a team by email before they sign in, which makes an invite.
 
-Open a person to see their profile (from the identity provider, as of their last sign-in, including their groups), their teams and role in each, their connected apps and their recent activity.
+Open a person to see their profile and access (platform role, email, first and last sign-in), their teams and role in each, their connected apps and their activity (the changes they made, from the audit log).
 
 <Screenshot slot="admin-user-detail" />
 
 Platform admins can:
 
 - **Change the platform role**: none, platform admin or platform auditor.
-- **Suspend…**: the person can't sign in, their sessions end, and their API keys and connected apps stop working at the next request. **Reactivate** undoes it.
+- **Suspend…** (in the page's ⋯ menu): the person can't sign in, their sessions end, and their API keys and connected apps stop working at the next request. **Reactivate** undoes it.
 - **Disconnect** one of their connected apps.
 
 The last active platform admin can't be demoted or suspended.
@@ -35,7 +35,9 @@ The last active platform admin can't be demoted or suspended.
 
 ### Manage a team
 
-Open a team: **Overview**, **Members** and **Settings**.
+Open a team: **Overview**, **Members**, **Agents** and **Settings**.
+
+- **Agents** (since v0.1.1) lists the team's agents, service-managed ones too, with template, who manages them, status and last use. Each opens the agent's page, which platform staff see read-only: **Overview** and **Settings**, and **Conversations** for platform admins (reading one still takes a reason). There's no **Test** chat, and staff can't change or hibernate the agent. See [Administering the platform](/docs/administer#what-platform-roles-never-reach).
 
 - **Assign owner** makes someone an owner: it promotes a member, adds someone, or invites them.
 - **Settings** renames the team and changes its description.
@@ -43,12 +45,15 @@ Open a team: **Overview**, **Members** and **Settings**.
 
 Teams aren't deleted.
 
+<Screenshot slot="admin-team-agents" />
+
 ## Personal workspaces
 
-A personal workspace's page has **Overview**, **Limits** and **Settings**.
+A personal workspace's page has **Overview**, **Limits**, **Agents** and **Settings**.
 
 - The **Overview** shows its owner, its agents and running agents against its limits, and **Audit this workspace**: links to its agents' settings and status, its usage and its audit log. Platform staff never see its conversations; a platform admin can read one with a reason (see [Reading conversations](/docs/administer/reading-conversations)).
 - **Limits** overrides **Max agents**, **Max running at once** and **Monthly budget** for this workspace. Leave a field empty to use the platform's default. The defaults are in [Settings](/docs/administer/settings#personal-workspaces).
+- **Agents** lists its agents, as for a team.
 - **Settings** can archive it, making it read-only.
 
 <Screenshot slot="admin-personal-workspace" />

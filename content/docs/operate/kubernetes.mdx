@@ -3,16 +3,16 @@ title: Install on Kubernetes
 description: "Deploy Pi Durable Platform on Kubernetes with the kubernetes launcher: images, databases, secrets, the platform's RBAC, Deployment, Service, ingress, and the agent pods it creates."
 ---
 
-This page installs Pi Durable Platform with `AGENTS_LAUNCHER=kubernetes`: the platform creates a pod for each running agent and deletes it when the agent hibernates. v0.1.0 ships no manifests, so the YAML below is an **example to adapt**, written from what the platform needs. Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
+This page installs Pi Durable Platform with `AGENTS_LAUNCHER=kubernetes`: the platform creates a pod for each running agent and deletes it when the agent hibernates. v0.1.1 ships no manifests, so the YAML below is an **example to adapt**, written from what the platform needs. Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
 
 ## 1. The images
 
-Use the release's images, pinned by digest (the digests are on the [release page](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.0)). Verify their signatures with cosign v3 or newer:
+Use the release's images, pinned by digest (the digests are on the [release page](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.1)). Verify their signatures with cosign v3 or newer:
 
 ```sh
 for image in pi-durable-platform pi-durable-platform-runtime; do
-  cosign verify ghcr.io/ncecere/$image:v0.1.0 \
-    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.1.0 \
+  cosign verify ghcr.io/ncecere/$image:v0.1.1 \
+    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.1.1 \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 done
 ```
@@ -89,7 +89,7 @@ spec:
       terminationGracePeriodSeconds: 75
       containers:
         - name: platform
-          image: ghcr.io/ncecere/pi-durable-platform:v0.1.0   # pin @sha256:… from the release
+          image: ghcr.io/ncecere/pi-durable-platform:v0.1.1   # pin @sha256:… from the release
           args: [serve]
           envFrom: [{ secretRef: { name: pi-durable-platform } }]
           env:
@@ -101,7 +101,7 @@ spec:
             - { name: TRUSTED_PROXIES, value: 10.0.0.0/8 }              # your ingress's addresses
             - { name: AGENTS_LAUNCHER, value: kubernetes }
             - { name: AGENTS_NAMESPACE, value: pi-durable-agents }
-            - { name: AGENTS_IMAGE, value: ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.0 }
+            - { name: AGENTS_IMAGE, value: ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.1 }
             - { name: AGENTS_GATEWAY_ADDR, value: ":8099" }
             - { name: AGENTS_GATEWAY_URL, value: http://pi-durable-platform.pi-durable-platform.svc.cluster.local:8099 }
           ports:
@@ -127,7 +127,7 @@ spec:
 
 Notes:
 
-- **One replica.** v0.1.0 supports one platform replica. Rate limits, thread events and OAuth state go through PostgreSQL, but the idle reaper only knows the event streams open on its own replica, and several replicas haven't been tested.
+- **One replica.** v0.1.1 supports one platform replica. Rate limits, thread events and OAuth state go through PostgreSQL, but the idle reaper only knows the event streams open on its own replica, and several replicas haven't been tested.
 - **`AGENTS_GATEWAY_ADDR`** defaults to `127.0.0.1:8099`, which agent pods can't reach: listen on `:8099` and set **`AGENTS_GATEWAY_URL`** to the address agents use, the Service's name and gateway port.
 - **Migrations**: with `MIGRATE_ON_START=true` the platform applies them at start. Otherwise run `pi-durable-platform migrate` (for example as a Job with the same image and `args: [migrate]`) before rolling out; a platform whose database is behind refuses to start. See [Upgrades and migrations](/docs/operate/upgrades).
 - **Shutdown**: on SIGTERM the platform fails readiness, waits `SHUTDOWN_DELAY` (5 s), then gives requests `SHUTDOWN_TIMEOUT` (60 s). Make `terminationGracePeriodSeconds` longer than both. Open event streams end then; clients reconnect.

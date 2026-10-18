@@ -8,30 +8,30 @@ Platform roles in Pi Durable Platform never reach conversations by themselves. S
 ## Who can
 
 - **Platform admins**, signed in to the browser. Not with an API key or a connected app.
-- **Platform auditors** can't read conversations, and can't list an agent's threads either: the list is for platform admins only. In v0.1.0 auditors still see the **Conversations** tab, but it doesn't load for them.
+- **Platform auditors** can't read conversations, and can't list an agent's threads either: the list is for platform admins only, and auditors don't get the **Conversations** tab.
 
 ## The Conversations tab
 
 Platform admins see a **Conversations** tab on an agent's page: every thread of the agent, private ones too, with its visibility, who started it, who has taken part and its last activity.
 
-- Titles of **private** conversations, and of **every** conversation of a personal workspace's agent or of a service-managed agent (an app's agent for one of its users), are hidden: titles are content.
-- The tab shows **Only platform admins can see this agent's conversations.** and, to admins, that reading one takes a reason recorded in the team's audit log.
+- Titles of **private** conversations, and of **every** conversation of a personal workspace's agent or of a service-managed agent (an app's agent for one of its users), shared or not, are hidden: titles are content. A hidden title reads **Title hidden** (until v0.1.1, "Private conversation"); the **Visibility** column says whether the thread is private or shared.
+- The card's description says which titles are hidden and that reading one takes a reason recorded in the team's audit log, which its owners can see.
 
 <Screenshot slot="agent-conversations-tab" />
 
-In the console, the tab is on the agent pages platform staff can open: the agents of personal workspaces (**Admin › Teams** › the workspace › **Agents**) and the agents of teams they are members of. For other agents, use the API (below).
+In the console, the tab is on every agent's page for platform admins. Since v0.1.1 that includes every team's agents: open **Admin › Teams** › the team or workspace › **Agents**, then the agent. Before, only personal workspaces' agents and the agents of teams the admin was a member of had a page.
 
 ## Read one
 
 <Steps>
 <Step>
 
-Choose the conversation, then **Read conversation**.
+On the conversation's row, choose **Read…**. The dialog asks **Read this conversation?**, or names the conversation when its title isn't hidden.
 
 </Step>
 <Step>
 
-Give a **reason** of 10 to 500 characters. Be specific: the owners will read it.
+Give a **reason** of 10 to 500 characters, then **Read conversation**. Be specific: the owners will read it.
 
 </Step>
 <Step>
@@ -45,7 +45,7 @@ The platform records the read, then shows the conversation once. Reading wakes t
 
 ## What is recorded
 
-Before the conversation is returned, the platform writes `thread.admin_read` to the **audit log of the agent's team**, shown as **Read a private conversation**, with:
+Before the conversation is returned, the platform writes `thread.admin_read` to the **audit log of the agent's team**, shown as **Read a private conversation** (or **Read a team conversation** for a shared conversation of a shared team), with:
 
 - who read it,
 - the agent and thread (`<agentId>/<threadId>`),

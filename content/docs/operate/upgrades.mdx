@@ -5,7 +5,7 @@ description: "How Pi Durable Platform's database migrations work, upgrading the 
 
 ## Migrations
 
-The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0 has 16.
+The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0 and v0.1.1 have 16 (v0.1.1 added none).
 
 Apply them either way:
 
@@ -58,4 +58,4 @@ Migrations don't go backwards. To return to an older version after a migration r
 
 ## Pi's durable package
 
-The runtime pins Pi's durable package (1.3.0 in v0.1.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.
+The runtime pins Pi's durable package (1.3.0 in v0.1.1) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.

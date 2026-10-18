@@ -1,6 +1,6 @@
 ---
 title: Security model
-description: "How Pi Durable Platform isolates agents and teams, what it trusts, how secrets and keys are stored and rotated, and its known limits in v0.1.0."
+description: "How Pi Durable Platform isolates agents and teams, what it trusts, how secrets and keys are stored and rotated, and its known limits in v0.1.1."
 ---
 
 ## One enforcement point
@@ -16,12 +16,12 @@ Apps and browsers reach agents **only through the platform**. It authenticates e
 
 ## What it trusts
 
-Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own in v0.1.0; that needs stronger isolation first (see Known limits).
+Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own in v0.1.1; that needs stronger isolation first (see Known limits).
 
 ## Teams and people
 
 - Team and platform roles are checked in the same database transaction as each change, and each change is audited in that transaction.
-- Platform roles never reach conversations. A platform admin's read of one needs a reason and is recorded in the team's log.
+- Platform roles never reach conversations. Platform admins and auditors see every team's agents (settings, status, usage) read-only: they can't use, change or hibernate them (since v0.1.1 hibernating another team's agent answers 403). A platform admin's read of a conversation needs a reason and is recorded in the team's log.
 - Personal API keys act as their person. Apps connected with OAuth Connect act as their person **without** the platform role. Service accounts act in their own team only.
 - Administration, members, keys and service accounts need a browser session: a stolen key can't create more keys or change roles.
 
@@ -53,3 +53,5 @@ Teams' own providers and MCP servers, apps' metadata documents and apps' MCP ser
 - **Thread IDs are chosen by clients**: anyone who may use an agent can set the MCP servers of a thread that doesn't exist yet, which a later private thread with that ID would inherit. Use random thread IDs.
 - **Sign-in rules apply at sign-in**: removing someone from an allowed group doesn't end their sessions, keys or connected apps. Suspend them instead.
 - **Database roles are server-wide**: agent roles outlive a dropped agents database.
+
+Each of these is planned on the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) (the agents database hardening, platform-chosen thread IDs and re-checking group membership in v0.2; stronger sandboxing later), with an issue labelled `roadmap`.

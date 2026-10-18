@@ -49,6 +49,11 @@
     "width": 1440,
     "height": 900
   },
+  "admin-team-agents": {
+    "src": "/images/admin-team-agents.webp",
+    "width": 1440,
+    "height": 900
+  },
   "admin-teams": {
     "src": "/images/admin-teams.webp",
     "width": 1440,
