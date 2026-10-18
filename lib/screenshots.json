@@ -1,1 +1,222 @@
-{}
+{
+  "admin-audit": {
+    "src": "/images/admin-audit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-create-team": {
+    "src": "/images/admin-create-team.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-mcp-server-tools": {
+    "src": "/images/admin-mcp-server-tools.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-mcp-servers": {
+    "src": "/images/admin-mcp-servers.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-model-edit": {
+    "src": "/images/admin-model-edit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-models-providers": {
+    "src": "/images/admin-models-providers.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-personal-workspace": {
+    "src": "/images/admin-personal-workspace.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-provider-models": {
+    "src": "/images/admin-provider-models.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-review-dialog": {
+    "src": "/images/admin-review-dialog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-settings": {
+    "src": "/images/admin-settings.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-teams": {
+    "src": "/images/admin-teams.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-templates-review": {
+    "src": "/images/admin-templates-review.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-trusted-apps": {
+    "src": "/images/admin-trusted-apps.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-usage": {
+    "src": "/images/admin-usage.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-user-detail": {
+    "src": "/images/admin-user-detail.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "admin-users": {
+    "src": "/images/admin-users.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "agent-conversations-tab": {
+    "src": "/images/agent-conversations-tab.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "agent-overview": {
+    "src": "/images/agent-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "agent-settings": {
+    "src": "/images/agent-settings.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "agent-test-chat": {
+    "src": "/images/agent-test-chat.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "all-agents": {
+    "src": "/images/all-agents.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "api-key-created": {
+    "src": "/images/api-key-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "api-keys": {
+    "src": "/images/api-keys.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "catalog": {
+    "src": "/images/catalog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "connected-apps": {
+    "src": "/images/connected-apps.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "consent-page": {
+    "src": "/images/consent-page.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "deploy-dialog": {
+    "src": "/images/deploy-dialog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "home": {
+    "src": "/images/home.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "personal-workspace": {
+    "src": "/images/personal-workspace.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "read-conversation-dialog": {
+    "src": "/images/read-conversation-dialog.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "service-account-key-created": {
+    "src": "/images/service-account-key-created.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "service-accounts": {
+    "src": "/images/service-accounts.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "sign-in": {
+    "src": "/images/sign-in.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-audit": {
+    "src": "/images/team-audit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-mcp-servers": {
+    "src": "/images/team-mcp-servers.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-members": {
+    "src": "/images/team-members.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-models": {
+    "src": "/images/team-models.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-overview": {
+    "src": "/images/team-overview.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-provider-add": {
+    "src": "/images/team-provider-add.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-templates": {
+    "src": "/images/team-templates.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "team-usage": {
+    "src": "/images/team-usage.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "template-submit": {
+    "src": "/images/template-submit.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "template-versions": {
+    "src": "/images/template-versions.webp",
+    "width": 1440,
+    "height": 900
+  },
+  "test-chat-private": {
+    "src": "/images/test-chat-private.webp",
+    "width": 1440,
+    "height": 900
+  }
+}
