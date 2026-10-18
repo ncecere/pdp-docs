@@ -27,7 +27,14 @@ Pi Durable Platform is an independent project. It runs agents built with Pi and 
 | `ghcr.io/ncecere/pi-durable-platform:v0.1.0` | The platform: distroless, user 65532, read-only root filesystem |
 | `ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.0` | The agent runtime: Node.js 22, user 10001, read-only root filesystem with a writable `/tmp` |
 
-Both are for linux/amd64 and linux/arm64. Deploy by digest; the digests, SBOMs and checksums are on the [GitHub release](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.0). Verify the signatures with cosign v3 or newer, as in [Install on Kubernetes](/docs/operate/kubernetes#1-the-images). The database is at migration 16.
+Digests of the signed multi-arch images:
+
+```text
+ghcr.io/ncecere/pi-durable-platform@sha256:15d1335db6c44d4499cef90097675320e8349a78bfc8b21b3d33e7a0588ef059
+ghcr.io/ncecere/pi-durable-platform-runtime@sha256:2621a07f708fcdab089bba4384da08932d278e350fc55a985d178a498df55b35
+```
+
+Both are for linux/amd64 and linux/arm64. Deploy by digest; the digests, SBOMs and checksums are also on the [GitHub release](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.0). Verify the signatures with cosign v3 or newer, as in [Install on Kubernetes](/docs/operate/kubernetes#1-the-images). The database is at migration 16.
 
 ## Requirements
 
