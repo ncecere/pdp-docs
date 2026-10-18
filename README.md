@@ -38,7 +38,7 @@ npm run dev          # http://localhost:3000
 lib/site.ts                       the site and product addresses, repositories and the release described
 lib/openapi.ts                    the OpenAPI source, tag labels, and per-page pruning of the document
 lib/source.tsx                    the docs and the generated API reference as one Fumadocs source
-lib/mark.json                     the logo's mark as inline SVG markup (a placeholder until the logo exists)
+lib/mark.json                     the logo's mark as inline SVG markup (written by scripts/sync-logo.mjs)
 app/brand.css                     the brand tokens (--pdp-*) for Tailwind v4, generated; byte-identical with the website's copy
 app/global.css                    Tailwind, Fumadocs' and fumadocs-openapi's CSS, Fumadocs' variables mapped onto brand.css
 app/(home)/page.tsx               the landing page
@@ -52,7 +52,7 @@ components/screenshot.tsx         named screenshot slots, with a marked placehol
 components/api-page.tsx           the API reference page (no "try it" playground: the docs never call an install)
 lib/screenshot-slots.json         the slots and their alt text
 lib/screenshots.json              imported screenshots and their sizes (written by the import script)
-public/                           favicons, apple-touch-icon, 192/512 icons and og.png (placeholders for now)
+public/                           favicons, apple-touch-icon, 192/512 icons and og.png, copied from pdp-assets
 scripts/                          sync-openapi, brand-css, sync-logo, import-screenshots, check-links, check-names
 nginx/                            nginx.conf and the site's server block and security headers
 Dockerfile                        builds the export, then serves it with nginx
@@ -88,15 +88,13 @@ The website (`../pdp-website`) has the same file, and **the two copies must stay
 
 ### Logo
 
-The logo isn't chosen yet. `lib/mark.json` holds a neutral placeholder mark (an outlined square on the family's dark tile), the same drawing as the website's, and `public/` holds icons drawn from it by `npm run logo -- --placeholder`. `components/logo.tsx` draws the mark inline (28 px, `aria-hidden`) beside the name as live text.
-
-Once `../pdp-assets/logo/<chosen>/` exists (with `mark-small.svg`, `mark.svg`, `favicon.ico`, `favicon.svg` and `png/`):
+The logo is "Wake": a 3 x 3 grid of dots on the family's dark tile, the one in the middle larger and fuchsia. Its source, exports and usage rules are in `../pdp-assets/logo/` (`logo/wake/`, `logo/README.md`). `components/logo.tsx` draws the mark inline from `lib/mark.json` (`mark-small.svg`, 28 px, `aria-hidden`) beside the name as live text, as the website does from its own `lib/mark.json`; change both together.
 
 ```sh
-npm run logo -- <chosen>
+npm run logo -- wake
 ```
 
-rewrites `lib/mark.json` from `mark-small.svg` and `mark.svg`, and copies the favicons, `png/apple-touch-icon.png`, `png/icon-192.png` and `png/icon-512.png` into `public/`, and `png/og-card.png` to `public/og.png`. Files the folder lacks are reported and the current ones kept. Change the website's `lib/mark.json` too, and commit.
+rewrites `lib/mark.json` from `wake/mark-small.svg` and `mark.svg`, and copies `favicon.ico`, `favicon.svg`, `png/apple-touch-icon.png`, `png/icon-192.png` and `png/icon-512.png` into `public/` unchanged, and `png/og-card.png` to `public/og.png`. Files the folder lacks are reported and the current ones kept. Rerun it when the logo changes and commit the results. (`npm run logo -- --placeholder` draws neutral stand-in icons from `lib/mark.json`, for a logo that doesn't exist yet.)
 
 ### Screenshots
 

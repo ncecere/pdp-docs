@@ -18,8 +18,8 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-touch-icon.png',
   },
-  // Open Graph card (public/og.png: drawn from the placeholder mark by
-  // `npm run logo -- --placeholder`, or the logo's og-card.png once it exists).
+  // Open Graph card (public/og.png: the Wake logo's og-card.png, copied by
+  // `npm run logo -- wake`, scripts/sync-logo.mjs).
   // Titles and descriptions come from each page's own <title> and description.
   openGraph: {
     type: 'website',

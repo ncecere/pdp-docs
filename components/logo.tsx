@@ -1,13 +1,11 @@
 import mark from '@/lib/mark.json';
 
 /*
- * The Pi Durable Platform logo: the mark beside the name. The logo isn't
- * chosen yet (it's being designed in pdp-assets), so lib/mark.json holds a
- * neutral stand-in, the same drawing as the website's. The mark is inline
- * SVG (no request, no font); the name beside it is live text. When the logo
- * exists, `npm run logo -- <chosen>` rewrites lib/mark.json from
- * ../pdp-assets/logo/<chosen>/mark-small.svg. The website draws the same mark
- * at the same size from its own copy of lib/mark.json: change both together.
+ * The Pi Durable Platform logo, "Wake": the mark beside the name. The mark is
+ * inline SVG (no request, no font) from lib/mark.json, which
+ * `npm run logo -- wake` writes from ../pdp-assets/logo/wake/mark-small.svg;
+ * the name beside it is live text. The website draws the same mark at the
+ * same size from its own copy of lib/mark.json: change both together.
  */
 
 /** The mark: decorative here, because the name is always next to it. */
