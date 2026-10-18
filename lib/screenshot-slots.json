@@ -255,7 +255,7 @@
     "files": [
       "agent-conversations-tab"
     ],
-    "alt": "An agent's Conversations tab as a platform admin: every thread with its visibility, who started it and its last activity; private titles shown as \"Title hidden\", and \"Read conversation\"."
+    "alt": "An agent's Conversations tab as a platform admin: every thread with its visibility, who started it, the people in it and its last activity; titles a platform admin may not see are shown as \"Private conversation\", each with a \"Read…\" button."
   },
   "read-conversation-dialog": {
     "files": [
