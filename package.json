@@ -1,0 +1,48 @@
+{
+  "name": "pdp-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "User, team, administrator, operator and app-developer documentation for Pi Durable Platform, the self-hosted console and API where teams deploy, test and manage durable agents built with Pi.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "postbuild": "node scripts/check-names.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "typecheck": "next typegen && tsc --noEmit",
+    "start": "serve out",
+    "sync:openapi": "node scripts/sync-openapi.mjs",
+    "brand": "node scripts/brand-css.mjs",
+    "logo": "node scripts/sync-logo.mjs",
+    "screenshots": "node scripts/import-screenshots.mjs",
+    "screenshots:check": "node scripts/import-screenshots.mjs --check"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "fumadocs-core": "16.17.3",
+    "fumadocs-mdx": "15.4.7",
+    "fumadocs-openapi": "12.4.2",
+    "fumadocs-ui": "16.17.3",
+    "lucide-react": "1.57.0",
+    "next": "16.4.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "shiki": "4.5.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/mdx": "2.0.14",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "postcss": "8.5.30",
+    "serve": "14.2.6",
+    "sharp": "0.35.5",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2"
+  }
+}

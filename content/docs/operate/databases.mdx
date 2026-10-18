@@ -1,0 +1,72 @@
+---
+title: Databases and roles
+description: "Pi Durable Platform's two PostgreSQL databases: the platform database, the agents database with one schema and role per agent, the provisioning role, connection details and clean-up."
+---
+
+Pi Durable Platform uses two PostgreSQL databases. They can be on the same server, but must be separate databases.
+
+| | Platform database | Agents database |
+|---|---|---|
+| Setting | `DATABASE_URL` | `AGENTS_DATABASE_URL` |
+| Holds | People, teams, templates, agents' records, thread records, keys (as digests), sealed secrets, usage, the audit log, rate-limit counters, sessions | One schema per agent: its conversations, in Pi's durable storage |
+| Who connects | The platform | The platform's provisioning role, and each agent's runtime with its own role |
+| Schema changes | The platform's migrations | Created per agent by the platform |
+
+Use PostgreSQL 17, the version the platform is developed and tested with. The agent provisioning relies on PostgreSQL 16 or later.
+
+## The platform database
+
+Create a database and a role that owns it:
+
+```sql
+CREATE ROLE pdp LOGIN PASSWORD '...';
+CREATE DATABASE pdp OWNER pdp;
+```
+
+The platform's migrations create everything inside it. See [Upgrades and migrations](/docs/operate/upgrades).
+
+## The agents database
+
+Create a second database owned by a **provisioning role** with `CREATEROLE`. It needn't be a superuser:
+
+```sql
+CREATE ROLE pdp_agents_admin LOGIN CREATEROLE PASSWORD '...';
+CREATE DATABASE pdp_agents OWNER pdp_agents_admin;
+```
+
+At start-up the platform hardens this database once: `PUBLIC` loses all rights on schema `public` and the right to create temporary tables. Making the provisioning role the database's owner gives it the rights to do that.
+
+For each agent it then creates:
+
+- a **login role** `agent_<id>`, with a random password, `NOINHERIT NOCREATEDB NOCREATEROLE` and a connection limit of 2;
+- a **schema** of the same name, owned by that role.
+
+The agent's role owns only its schema and has no rights on any other, so one agent can't read another's conversations. The provisioning role is never given to agents. Deleting an agent drops its schema and role.
+
+`AGENTS_CREATE_DATABASE=true` makes the platform create the agents database through `DATABASE_URL` at start-up. It's for development and refused on a reachable host.
+
+### How runtimes connect
+
+Each runtime gets a connection URL built from `AGENTS_DATABASE_URL`: the same host, database and TLS settings (`sslmode` and so on), with the agent's own role and password. If agent pods reach PostgreSQL by another address than the platform (another DNS name, a pooler), set `AGENTS_RUNTIME_DATABASE_HOST` to that `host:port`.
+
+A runtime holds **one** connection for its lifetime and takes a PostgreSQL advisory lock on it: that's how a single runtime owns an agent. Don't put a transaction-mode connection pooler between runtimes and PostgreSQL, since session-level advisory locks need a session.
+
+### Size
+
+Each agent's schema holds about 25 tables and indexes. That's fine for thousands of agents. Count connections: one per running agent, plus the platform's pools.
+
+## Clean-up
+
+Roles are server-wide in PostgreSQL. If an agent's deletion fails halfway, or you restore an older platform database, schemas and roles may be left that no agent owns. Remove them with:
+
+```sh
+pi-durable-platform prune-agent-storage --dry-run   # list them
+pi-durable-platform prune-agent-storage             # remove them
+```
+
+Run it while no agents are being created. It only considers schemas in the agents database `AGENTS_DATABASE_URL` names; roles of a dropped agents database must be removed by hand.
+
+## Known limits
+
+- PostgreSQL advisory locks are database-wide: a role in the agents database could take another agent's lock key and stop it from starting. That's acceptable while agents run only reviewed templates; it is why agents can't run uploaded code yet.
+- Every commit is a network round trip to PostgreSQL. Place runtimes and the database close together.

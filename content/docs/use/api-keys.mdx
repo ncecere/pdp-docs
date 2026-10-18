@@ -1,0 +1,50 @@
+---
+title: API keys
+description: Personal API keys for your own scripts and tools in Pi Durable Platform, what they can reach, expiry, revoking and limits.
+---
+
+A personal API key lets a script or tool call Pi Durable Platform's API **as you**, with your access. Open your account menu (your name at the bottom of the sidebar) › **API keys**.
+
+<Screenshot slot="api-keys" />
+
+## Create a key
+
+<Steps>
+<Step>
+
+Choose **Create API key**. Give it a name that says where you'll use it, for example "Deploy script on my laptop".
+
+</Step>
+<Step>
+
+Choose when it expires: 1 to 365 days (90 by default). Keys always expire.
+
+</Step>
+<Step>
+
+Copy the key. It starts with `pdp_` and is **shown once**, right after it's created. The platform keeps only a digest of it.
+
+<Screenshot slot="api-key-created" />
+
+</Step>
+</Steps>
+
+Use it as a bearer token:
+
+```sh
+curl https://agents.example.com/v1/agents -H "Authorization: Bearer $PDP_KEY"
+```
+
+You can have up to 20 active keys. Keys can only be created in the browser, never with another key.
+
+## What a key reaches
+
+A key acts as you on the routes that accept bearer credentials: agents, threads, messages and events, template listings, your teams' models, usage, limits and MCP servers, and `GET /v1/me` and `GET /v1/teams`. Everything else (members, invites, keys, service accounts, administration, connected apps) needs a browser session. See [API overview and authentication](/docs/build#which-routes-take-which-credentials).
+
+A key shares your rate limit (`REQUESTS_PER_MINUTE`, 600 a minute by default) with your browser session and your connected apps.
+
+## Revoke a key
+
+**Revoke…** stops a key at the next request. Revoked and expired keys stay in the list for 30 days, then disappear.
+
+For a team's apps, use a [service account](/docs/teams/service-accounts) instead: its keys belong to the team and keep working when people leave.

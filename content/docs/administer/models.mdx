@@ -1,0 +1,72 @@
+---
+title: Models and providers
+description: "Pi Durable Platform's model catalog for platform admins: providers and their kinds, proxy and direct access, discovering models, publishing them to teams and personal workspaces, prices and cost, and the default model."
+---
+
+Agents in Pi Durable Platform run on models from **providers** that platform admins add in **Admin › Models**. It has two tabs: **Providers** and **Models**. The **Owner** filter shows the platform's providers, one team's, or every owner's.
+
+<Screenshot slot="admin-models-providers" />
+
+## Add a provider
+
+**Add provider**:
+
+| Field | |
+|---|---|
+| **Type** | **OpenAI** (Responses API), **Anthropic** (Messages API), **OpenAI-compatible (chat completions)** (vLLM, Ollama, model gateways and similar servers), **OpenAI Responses-compatible** or **Anthropic-compatible** |
+| **Name** | What teams see, unique |
+| **Base URL** | Prefilled for OpenAI and Anthropic; required for the others, for example `https://models.example.com/v1` |
+| **API key** | Stored encrypted and never shown again |
+| **How agents reach it** | **Proxy** (default) or **Direct**, below |
+| **Extra headers** | Optional, sent with every request (up to 20), for example a gateway's tenant header; stored encrypted |
+
+Replacing the key in **Settings** takes effect on agents' next requests.
+
+### Proxy or direct
+
+- **Proxy** (the default): agents call the platform's model gateway with their own short credential. The gateway checks that the agent may use the model the request names and the endpoint (`/chat/completions`, `/responses` or `/v1/messages`), adds the key and headers, streams the reply back and records the tokens. Agents never see the key and need no network path except to the platform.
+- **Direct**: agents get the provider's URL and key and call it themselves. Use it only for gateways that issue scoped keys, and allow the agents' network to reach the provider. The platform doesn't see these requests; agents report their usage instead.
+
+Platform providers are reached without the address guard that teams' providers go through, so you can point them at internal gateways.
+
+## Add models
+
+Open a provider:
+
+- **Discover models** asks the provider what it offers. Pick the ones to add. New models are published to every team; edit one to change that.
+- **Add model manually** takes the provider's model ID.
+
+<Screenshot slot="admin-provider-models" />
+
+Each model has:
+
+- **Model ID**, as the provider's API expects it (can't change), and a **Name** teams see.
+- **Context window** (default 128,000 tokens) and **Max output tokens** (default 16,000).
+- **Accepts images** and **Reasoning** ("It thinks before it answers").
+- **Input price** and **Output price**, in US dollars per million tokens.
+- **Enabled**.
+- **Who may use it**: **All teams** or **Selected teams**, and **Personal workspaces**.
+
+<Screenshot slot="admin-model-edit" />
+
+## Publishing
+
+A team sees a model once it's enabled and published to it. Template versions and agents choose from the models published to their team. **Personal workspaces** offers the model to every personal workspace; a template in the catalog that personal workspaces deploy needs its model to be offered to them too.
+
+Unpublishing or turning off a model takes it away from new use. Agents already on it don't start until a team moves them to another model; their Overview says **Its model isn't available**. Turning off a provider does the same for all its models.
+
+A model or provider still used by a template or an agent can't be deleted: move them first, or turn it off instead.
+
+## Prices and cost
+
+Usage reports estimate cost from each model's **current** prices. Without prices, requests are counted but cost nothing in the report, which says how many requests were unpriced. Changing a price recalculates past periods too: the estimate is not an invoice. See [Usage](/docs/administer/usage).
+
+## The platform's default model
+
+Templates and agents that don't choose a model run on the platform's default model, set by the operator with `AGENTS_MODEL_PROVIDER` (`demo`, a scripted model, or `openai-compatible` with `AGENTS_MODEL_BASE_URL`, `AGENTS_MODEL_API_KEY` and `AGENTS_MODEL_ID`). It is shown as **Platform default**. Its key is given to agents directly, so the gateway doesn't see its requests; agents report their usage. See [Configuration](/docs/operate/configuration#agents).
+
+## Teams' own providers
+
+Teams may add providers of their own while **Teams may add their own model providers** is on in [Settings](/docs/administer/settings). With the **Owner** filter on **All owners**, you see every team's providers and models. You can turn off, change or delete them; the change is recorded in the team's audit log. A team's providers are proxy only and go through the address guard; see [Team models](/docs/teams/models).
+
+Changes to providers and models are recorded in the audit log (`model_provider.*`, `model.*`).

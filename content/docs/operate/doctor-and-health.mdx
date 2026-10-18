@@ -1,0 +1,54 @@
+---
+title: Doctor and health checks
+description: "pi-durable-platform doctor, the /healthz and /readyz probes, logs and request IDs, and common start-up problems."
+---
+
+## doctor
+
+`pi-durable-platform doctor` checks an install without changing anything, using the same configuration as `serve`:
+
+1. **Configuration**: loads it and validates it for `serve` (or `--mode migrate`).
+2. **Safety**: the [production safety checks](/docs/operate/configuration#production-safety-checks).
+3. **PostgreSQL**: connects to the platform database and reports its version and the time it took.
+4. **Migrations**: whether the database is at the binary's migration.
+5. **Keys**: during an `API_KEY_PEPPER` rotation, how many keys are still on the previous pepper.
+
+```sh
+pi-durable-platform doctor            # text report
+pi-durable-platform doctor --json     # for scripts
+pi-durable-platform doctor --timeout 20s
+```
+
+It exits 1 if any check fails, with a fix for each failure. The image has no shell; on Kubernetes run:
+
+```sh
+kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform doctor
+```
+
+`doctor` doesn't check the agents database, the Kubernetes API or the identity provider. The readiness probe covers the agents database; deploying and testing an agent covers the rest.
+
+## Probes
+
+| Path | Answers |
+|---|---|
+| `GET /healthz` | Liveness: the process is up |
+| `GET /readyz` | Readiness: both databases answer and the platform isn't shutting down |
+
+On SIGTERM `/readyz` fails first, for `SHUTDOWN_DELAY`, so load balancers stop sending traffic before the server stops.
+
+## Logs
+
+The platform logs to standard output, as JSON by default (`LOG_FORMAT`, `LOG_LEVEL`). Every response carries an `X-Request-ID` header; the same ID is in the logs and in audit entries, so you can follow one request. Secrets, keys and tokens are never logged.
+
+v0.1.0 has no metrics endpoint.
+
+## Common problems
+
+| Symptom | Cause |
+|---|---|
+| Refuses to start: "the database is at migration N but this binary needs M" | Run `migrate`, or set `MIGRATE_ON_START=true` |
+| Refuses to start naming `DEV_AUTH`, `AGENTS_LAUNCHER=local`, an example key or an `http` `APP_URL` | A production safety check: see [Configuration](/docs/operate/configuration#production-safety-checks) |
+| "agents database not ready; retrying" in the logs | The platform waits for the agents database at start-up; check `AGENTS_DATABASE_URL` and the network |
+| Agents answer `503 agent_unavailable` | The runtime didn't start in time: check the agent pod's events and logs, the image, `AGENTS_IMAGE_PULL_SECRET`, quotas |
+| Agents start but every reply fails | Agents can't reach `AGENTS_GATEWAY_URL` (the gateway listens on `127.0.0.1` by default), or the model's provider refuses: see the thread's last error |
+| Everyone is refused at sign-in with "A verified email address is required" | Your provider doesn't send `email_verified`: see [OIDC sign-in](/docs/operate/oidc) |

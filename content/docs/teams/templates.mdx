@@ -1,0 +1,63 @@
+---
+title: Templates
+description: "Team templates in Pi Durable Platform: instructions, model and MCP servers, versions, asking to publish one to the catalog, review, and archiving."
+---
+
+A template is what a Pi Durable Platform agent is deployed from. A team's own templates are on its **Templates** page; the templates every team can deploy are in the **Catalog**.
+
+<Screenshot slot="team-templates" />
+
+## What a template holds
+
+A template has a name, a slug and a description, and a list of **versions**. Each version holds:
+
+- **Instructions**: the agent's system prompt (up to 20,000 characters).
+- **The model it runs on**: one of the models the team may use, or the platform's default model. A team can still pick another model for one agent.
+- **MCP servers its agents can call**: some servers, each with all its tools or some of them.
+- **Apps can give its agents their own MCP servers for a thread**: whether an app may add its user's MCP servers to a thread (see [Thread MCP servers](/docs/build/thread-mcp-servers)).
+- **What changed**: notes about the version.
+
+Agents also get the built-in `get_time` tool. Templates don't carry code: an agent is Pi's durable agent with these settings.
+
+## Create a template
+
+Editors, admins and owners choose **New template** on the team's **Templates** page. Give it a name and a slug (unique in the team; it identifies the template in the API), and its first version. A new team template is **private**: only the team sees and deploys it.
+
+## Add a version
+
+On the template's **Versions** tab, choose **New version**. Versions never change once made. New agents get the newest version; existing agents keep theirs until someone upgrades them on the agent's page. Through the API, a setting a new version leaves out keeps the current version's.
+
+<Screenshot slot="template-versions" />
+
+## Publish it to the catalog
+
+Owners and admins can offer a team template to every team:
+
+<Steps>
+<Step>
+
+Choose **Submit to the catalog** on the template's page. It's **Waiting for review**.
+
+</Step>
+<Step>
+
+A platform admin approves it or rejects it with a note. Approved, it's in the catalog and every team can deploy it. Rejected, it's private again and the page shows **The request to publish was rejected** with the reviewer's note.
+
+</Step>
+</Steps>
+
+**Withdraw the request** cancels a pending request; **Take out of the catalog** makes a published template private again. Agents other teams already deployed from it keep working.
+
+<Screenshot slot="template-submit" />
+
+A template whose current version runs on one of the **team's own models** or attaches one of the **team's own MCP servers** can't go to the catalog: other teams couldn't use them. Move it to platform models and servers first.
+
+While a template is in the catalog, new versions are what every team gets on its next deployment. A version that would use the team's own models or servers is refused while the template is in the catalog or waiting for review.
+
+## Archive a template
+
+Turn on **Archived** in the template's **Settings**. An archived template takes no new deployments. Agents deployed from it keep their version and keep working. You can unarchive it.
+
+## Platform templates
+
+Platform admins write **platform templates**, which are always in the catalog and run on platform models and servers only. Teams can't change them. Without a template, agents use the platform's built-in `assistant` template.

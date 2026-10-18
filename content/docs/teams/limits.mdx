@@ -1,0 +1,45 @@
+---
+title: Limits
+description: The fixed limits on Pi Durable Platform teams, the limits of personal workspaces, what the errors look like, and the request rate limit.
+---
+
+Pi Durable Platform has a few fixed limits for teams, and adjustable ones for personal workspaces.
+
+## Teams
+
+| Limit | Value | When reached |
+|---|---|---|
+| Agents made by hand | 50 per team | `409 too_many_agents` |
+| Service-managed agents (by key) | no platform limit | |
+| Service accounts | 100 per team | `409 too_many_service_accounts` |
+| Active keys per service account | 2 | `409 too_many_keys` |
+| Personal API keys | 20 active per person | `409 too_many_keys` |
+
+Shared teams have no limit on how many agents run at once. The cluster's capacity is the real bound: idle agents hibernate and free their place.
+
+## Personal workspaces
+
+| Limit | Default | When reached |
+|---|---|---|
+| **Max agents** | 5, counting agents apps created | `409 limit_reached` on create |
+| **Max running at once** | 2 | `409 too_many_running` when waking another |
+| **Monthly budget** | none | recorded, not enforced yet |
+
+Platform admins change the defaults in **Admin › Settings** and override them for one workspace in **Admin › Teams**. The workspace's **Overview** shows them with what's in use.
+
+`GET /v1/teams/{team}/limits` returns the limits and the counts (`maxAgents`, `maxRunning`, `agentCount`, `runningCount`, `monthlyBudgetUsd`) for any workspace, with whether the caller may add a model provider or MCP server now.
+
+<Callout title="Streams keep agents awake">
+An open event stream on a thread keeps its agent from hibernating. In a personal workspace with 2 running at once, streams on two agents hold both places. Close a conversation's stream when nobody is looking at it; `GET /v1/agents/events` follows every thread without waking anything.
+</Callout>
+
+## Request rate
+
+Every person has one budget of `REQUESTS_PER_MINUTE` requests a minute (600 by default), shared by their browser sessions, personal API keys and connected apps. Each service account has its own. Over it, the answer is `429 rate_limited` with `Retry-After`. Opening an event stream counts as one request. See [Errors and limits](/docs/build/errors-and-limits).
+
+## Other bounds
+
+- Agent names: 1 to 100 characters, unique in the team. Descriptions: up to 2,000.
+- Template instructions: up to 20,000 characters.
+- Messages: up to 32,000 characters of text.
+- Thread IDs: 1 to 64 letters, digits, dashes or underscores. Titles: 1 to 200 characters.

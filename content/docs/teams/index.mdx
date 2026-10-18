@@ -1,0 +1,42 @@
+---
+title: Running a team
+description: What a team owns in Pi Durable Platform, the team's pages in the console, and who does what.
+---
+
+A team in Pi Durable Platform owns its **agents**, its **templates**, its **service accounts**, and optionally **model providers** and **MCP servers** of its own. Its members test the agents in the console; its apps reach them through the API.
+
+Platform admins create teams and name the first owner. If your platform set up a request form, Home links to it as **Request a new team**.
+
+## The team's pages
+
+Choose the team in the team switcher. The sidebar then lists the team's pages; you see the ones your role allows.
+
+| Page | What's there |
+|---|---|
+| **Overview** | Your role, the team's owners, admins and editors, recent changes, and its limits |
+| **Agents** | The team's agents: deploy, test, change, upgrade, delete ([Deploying agents](/docs/teams/deploy-agents)) |
+| **Templates** | The team's own templates and their versions; asking to publish one ([Templates](/docs/teams/templates)) |
+| **Models** | The models the team may use, and providers of its own ([Team models](/docs/teams/models)) |
+| **MCP servers** | The MCP servers the team may use, and servers of its own ([Team MCP servers](/docs/teams/mcp-servers)) |
+| **Usage** | Model requests, tokens and estimated cost ([Usage](/docs/teams/usage)) |
+| **Service accounts** | Identities for the team's apps and their keys ([Service accounts](/docs/teams/service-accounts)) |
+| **Team settings** | **Members** and open invites, the **Audit log**, and **General** ([Members and roles](/docs/teams/members-and-roles), [Audit log](/docs/teams/audit-log)) |
+
+<Screenshot slot="team-overview" />
+
+## Who does what
+
+- **Members** use the team's agents and see its members, service accounts, models, MCP servers, usage and limits.
+- **Editors** also deploy and change agents and write team templates, and read the audit log.
+- **Admins** also delete agents, manage members (not owners), service accounts and keys, and the team's own providers and MCP servers, and ask to publish templates.
+- **Owners** also manage other owners.
+
+The full table is in [Members and roles](/docs/teams/members-and-roles).
+
+## Archived teams
+
+Only platform admins rename, archive and unarchive teams. An archived team is shown as **Archived (read-only)**: it takes no new agents or templates, its members and service accounts can't be changed, and its service accounts' keys don't work until it is unarchived.
+
+## Limits
+
+A team may have up to 50 agents made by hand (service-managed agents don't count), 100 service accounts, and 2 active keys per service account. See [Limits](/docs/teams/limits).

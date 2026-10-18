@@ -1,0 +1,6 @@
+{
+  "title": "API reference",
+  "description": "The OAuth endpoints and the management API",
+  "root": true,
+  "pages": ["index", "oauth-endpoints", "---Management API---", "reference"]
+}

@@ -1,0 +1,51 @@
+---
+title: MCP servers
+description: "Pi Durable Platform's MCP catalog for platform admins: adding remote MCP servers, headers, proxy and direct access, publishing, tools, call records and teams' own servers."
+---
+
+Platform admins add remote MCP servers to Pi Durable Platform in **Admin › MCP servers** and publish them to teams. Templates then choose which servers, and which of their tools, their agents get.
+
+<Screenshot slot="admin-mcp-servers" />
+
+## Add a server
+
+**Add MCP server**:
+
+| Field | |
+|---|---|
+| **Name** | What teams see |
+| **Slug** | Names its tools in agents (`mcp__<slug>__<tool>`): 1 to 32 lower-case letters, digits or underscores, unique across the platform and every team's servers. It can't change. |
+| **URL** | The server's Streamable HTTP endpoint |
+| **Headers** | Optional, sent with every request, for example `Authorization: Bearer …`. Stored encrypted and never shown again, here or in the API. |
+| **Access** | **Proxy** (default) or **Direct** |
+| **Who may use it** | **All teams** or **Selected teams**, and **Personal workspaces** |
+
+The platform connects and reads the server's tools when you add it. **Refresh tools** reads them again; if reading fails, the server's page says why.
+
+<Screenshot slot="admin-mcp-server-tools" />
+
+### Proxy or direct
+
+- **Proxy** (the default): agents call the server through the platform's gateway (`/mcp-proxy/server/<id>`). The gateway adds the headers, refuses `tools/call` for tools the template version left out, and records each call. Agents never see the headers.
+- **Direct**: agents get the URL and headers and call the server themselves. The agents' network must allow it, and the platform doesn't see the calls.
+
+## How agents get tools
+
+A template version lists servers, each with all its tools or some of them. Agents on that version get them as `mcp__<slug>__<tool>`, defined from the tool list the platform stored and connected on first use. With more than 20 MCP tools, they're deferred behind a `tool_search` tool.
+
+Every agent and every thread uses the same headers. Anything the server keeps (notes, tickets) is shared by everyone who uses those agents. Prefer servers whose credentials suit everyone a template reaches.
+
+## Publishing, turning off, deleting
+
+Teams it's published to can give its tools to their templates' agents; personal workspaces, to their agents.
+
+- **Turned off**, templates can't pick it, and agents don't get its tools until it's turned on again.
+- A server template versions use can't be deleted: turn it off instead.
+
+## Teams' own servers
+
+Teams may add servers of their own while **Teams may add their own MCP servers** is on in [Settings](/docs/administer/settings). With the **Owner** filter on **All owners** you see every team's servers, and you can turn off, change, refresh or delete them. Team servers are proxy only and go through the address guard; see [Team MCP servers](/docs/teams/mcp-servers).
+
+## App servers
+
+Apps can give agents their own MCP servers for one thread, when a template version allows it. Which hosts they may use is the operator's choice (`AGENTS_CLIENT_MCP_HOSTS`, none by default). See [Thread MCP servers](/docs/build/thread-mcp-servers).

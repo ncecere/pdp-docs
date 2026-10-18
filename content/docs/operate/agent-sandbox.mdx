@@ -1,0 +1,85 @@
+---
+title: Agent Sandbox and warm pools
+description: "Run Pi Durable Platform's agents with Kubernetes Agent Sandbox: a Sandbox per agent that suspends when idle, or claims on a warm pool of standby runtimes for faster wakes."
+---
+
+With `AGENTS_LAUNCHER=agent-sandbox`, Pi Durable Platform runs agents as [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) resources (`agents.x-k8s.io/v1beta1` and `extensions.agents.x-k8s.io/v1beta1`). Install Agent Sandbox and its extensions in your cluster first. Everything else is as in [Install on Kubernetes](/docs/operate/kubernetes); this page covers the differences.
+
+There are two modes.
+
+## A Sandbox per agent
+
+Set `AGENTS_IMAGE` (the runtime image) and leave `AGENTS_SANDBOX_WARM_POOL` empty. Each agent gets a `Sandbox` named `agent-<id>` around the same hardened pod as the `kubernetes` launcher, with its secrets in a Secret of the same name.
+
+- **Hibernating** sets the Sandbox's `operatingMode` to `Suspended`: the pod goes; the Sandbox and the Secret stay.
+- **Waking** sets it back to `Running`, refreshing the Secret in case the agent's settings changed while it slept.
+
+The platform needs, in the agents' namespace:
+
+```yaml
+rules:
+  - apiGroups: [agents.x-k8s.io]
+    resources: [sandboxes]
+    verbs: [get, list, create, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, update, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+```
+
+## Warm pool
+
+A warm pool keeps runtimes started and **Ready** before any agent needs them, so a wake skips scheduling, the image pull and Node.js start-up.
+
+Set `AGENTS_SANDBOX_WARM_POOL` to the name of a `SandboxWarmPool` you create in the agents' namespace. Its pods run the runtime image **without** `AGENT_ID` and **with** `RUNTIME_ACTIVATION_TOKEN`: such a runtime starts in standby and waits.
+
+<Steps>
+<Step>
+
+**The activation token.** Either set `AGENTS_SANDBOX_ACTIVATION_SECRET` to the name of a Secret in the agents' namespace (key `RUNTIME_ACTIVATION_TOKEN`), which the platform creates with a random token at start-up if it's missing; or give the token to the platform directly with `AGENTS_SANDBOX_ACTIVATION_TOKEN` (at least 32 characters). Set one, not both.
+
+</Step>
+<Step>
+
+**The pool.** Create the `SandboxWarmPool` with the runtime image, `RUNTIME_ACTIVATION_TOKEN` from that Secret, and the same hardening as an agent pod (non-root user 10001, read-only root filesystem with a writable `/tmp`, no service account token, port 4100). Size it to the wakes you expect at once.
+
+</Step>
+<Step>
+
+**Waking an agent** creates a `SandboxClaim` named `agent-<id>` on the pool. When its runtime is ready, the platform posts the agent's configuration (its schema, database URL, runtime token and model settings) to the runtime's `/activate` with the activation token. From then on that runtime is the agent and accepts only the agent's own token. Nothing about the agent is stored in Kubernetes.
+
+</Step>
+<Step>
+
+**Hibernating** deletes the claim, which deletes that runtime; the pool starts a replacement.
+
+</Step>
+</Steps>
+
+While a previous runtime is still letting go of the agent, activation answers `409 owned_elsewhere` and the platform retries. A runtime that restarts comes back in standby and is activated again on the next request.
+
+The platform needs, in the agents' namespace:
+
+```yaml
+rules:
+  - apiGroups: [extensions.agents.x-k8s.io]
+    resources: [sandboxclaims]
+    verbs: [get, list, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, delete]   # the activation Secret
+```
+
+### Rotating the activation token
+
+Delete the Secret (the platform creates a new one) and delete the pool's unclaimed sandboxes, so that runtimes started with the old token are replaced. With `AGENTS_SANDBOX_ACTIVATION_TOKEN`, change it in both places.
+
+### Who can activate a runtime
+
+The activation token reaches only the platform and the pool's pods. Agent pods should accept traffic from the platform alone (see [Network isolation](/docs/operate/network-isolation)), so one agent can't reach a standby runtime and activate it.
+
+## Why agents can move
+
+An agent's state is in PostgreSQL in either mode, so a hibernated agent can wake in any runtime on any node. One runtime owns an agent at a time: it holds a PostgreSQL advisory lock on its only connection, and a runtime that loses the connection loses the lock and its ability to write at the same moment. See [Security model](/docs/operate/security).

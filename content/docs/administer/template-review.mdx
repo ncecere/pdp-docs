@@ -1,0 +1,57 @@
+---
+title: Template review and platform templates
+description: Reviewing teams' requests to publish templates to Pi Durable Platform's catalog, and writing platform templates.
+---
+
+The catalog is what every team in Pi Durable Platform can deploy. It holds **platform templates**, which platform admins write, and **team templates** that a platform admin approved. **Admin › Templates** lists every template, with requests to publish at the top.
+
+<Screenshot slot="admin-templates-review" />
+
+## Review a request
+
+A team's owners and admins ask to publish one of their templates. It shows as **Waiting for review** until a platform admin decides.
+
+<Steps>
+<Step>
+
+Open the template and read its current version: its instructions, its model and its MCP servers. That version is what other teams will deploy.
+
+</Step>
+<Step>
+
+Choose **Review request**.
+
+</Step>
+<Step>
+
+**Approve** puts it in the catalog: every team can deploy it now. **Reject** sends it back to private; a **Note to the team** is required, saying what to change before asking again. The team sees the note.
+
+</Step>
+</Steps>
+
+<Screenshot slot="admin-review-dialog" />
+
+Approval is refused when the template's current version runs on one of the team's own models or attaches one of its own MCP servers (`409 team_model`, `409 team_mcp_server`): no other team could use them.
+
+The team can take an approved template out of the catalog again at any time. Agents other teams deployed from it keep working on their version.
+
+### What to look for
+
+- The instructions do what the description says, and nothing a team other than its authors wouldn't expect.
+- The model is one every team may use, and its cost is reasonable for broad use.
+- The MCP servers and tools are ones every team should get. Their credentials act the same for every agent and thread.
+- Whether it lets apps give its agents their own MCP servers for a thread.
+
+Every decision is recorded in the team's audit log (`agent_template.approve`, `agent_template.reject`).
+
+## Platform templates
+
+**New platform template** creates a template that is always in the catalog. It may run on platform models only and attach platform MCP servers only. Only platform admins change platform templates; teams deploy them.
+
+Agents keep the version they were deployed with. When you add a version, tell the teams that use the template: they upgrade their agents on each agent's page.
+
+Archive a template to stop new deployments; existing agents keep working.
+
+## The built-in assistant
+
+The platform has a built-in platform template, `assistant`. Agents created without naming a template (for example `PUT …/agents/by-key/…` without `templateId`) use it.

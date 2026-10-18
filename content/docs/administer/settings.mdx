@@ -1,0 +1,51 @@
+---
+title: Settings
+description: "Pi Durable Platform's platform-wide settings: personal workspaces and their default limits, teams' own model providers and MCP servers, private networks, and trusted apps."
+---
+
+**Admin › Settings** holds the settings for the whole Pi Durable Platform. Platform auditors see them read-only. Each change is recorded in the audit log.
+
+<Screenshot slot="admin-settings" />
+
+## Personal workspaces
+
+| Setting | Default | |
+|---|---|---|
+| **Give everyone who signs in a personal workspace** | On | Turned off, no new personal workspaces are created. Existing ones stay: archive one in **Admin › Teams** to make it read-only. |
+| **People may add their own model providers in their personal workspace** | Off | Also needs **Teams may add their own model providers** on |
+| **People may add their own MCP servers in their personal workspace** | Off | Also needs **Teams may add their own MCP servers** on |
+| **Max agents** | 5 | Agents one personal workspace may have |
+| **Max running at once** | 2 | Agents awake at the same time. Waking another is refused until one hibernates. |
+| **Monthly budget** | none | Recorded, not enforced yet |
+
+You can override the limits for one workspace in **Admin › Teams** (see [People and teams](/docs/administer/people-and-teams#personal-workspaces)).
+
+## Team providers and MCP servers
+
+Team owners and admins can add model providers and MCP servers of their own: they're for that team only, and agents reach them through the platform.
+
+| Setting | Default | |
+|---|---|---|
+| **Teams may add their own model providers** | On | Turned off, teams can't add new providers. Their existing ones keep working and can still be changed or deleted. |
+| **Teams may add their own MCP servers** | On | The same, for MCP servers |
+| **Private networks** | none | CIDRs, such as `10.20.0.0/16`, where teams' providers and servers may be (up to 50) |
+
+### Private networks
+
+Teams' own providers and MCP servers must be on public addresses. List the private networks where teams may also reach them; the list applies to both. Loopback, link-local and cloud metadata addresses are never allowed, whatever you list.
+
+Every connection to a team's service is resolved and checked against this list when it's made, so a change applies at once. List only networks you're willing to let every team's agents call through the platform.
+
+## Trusted apps
+
+Apps people connect with OAuth Connect normally show an approval page once per person. **Trusted apps** skip it: people still sign in, and the app still gets only their access, never their platform role.
+
+Add an app by its **Client ID**, the https address of its metadata document (its OAuth `client_id`), such as `https://chat.example.com/oauth/client-metadata.json`, and a **Label** for the list. Only apps identified by a metadata document can be trusted: an app that registered itself has a changing ID and a name anyone could choose. The list is empty by default and is read on every request, so changes apply at once.
+
+<Screenshot slot="admin-trusted-apps" />
+
+<Callout type="warn" title="Trust only apps whose redirect addresses you control">
+A trusted app gets a person's approval without the person seeing a page. If its metadata document lists loopback redirect addresses, any local program could use its client ID to get a code silently. Trust production documents that list only the app's own https addresses.
+</Callout>
+
+See [OAuth Connect](/docs/build/oauth-connect) for how apps connect.

@@ -1,0 +1,49 @@
+---
+title: Thread MCP servers
+description: "Giving a Pi Durable Platform agent your user's own MCP servers for one thread: when templates allow it, the allowed hosts, how headers are kept, proxy and direct modes, and tool names."
+---
+
+A chat app may let its users enable their own MCP servers, such as a personal notes server with the user's token. Your app can give those servers to an agent **for one thread**. The agent offers their tools in that thread only.
+
+## When it's allowed
+
+- The agent's template version must allow it: **Apps can give its agents their own MCP servers for a thread** (`clientMcp`).
+- Each server's host must match `AGENTS_CLIENT_MCP_HOSTS`, which the operator sets. It's empty by default, which allows none.
+
+Otherwise the request is refused (`client_mcp_not_allowed`, `client_mcp_host_not_allowed`).
+
+## Give a thread its servers
+
+With a message:
+
+```json
+{
+  "text": "Add this to my notes",
+  "requestId": "r9",
+  "mcpServers": [
+    {"name": "My notes", "url": "https://notes.example.com/mcp", "headers": {"Authorization": "Bearer …"}, "expiresInSeconds": 3600}
+  ]
+}
+```
+
+or on their own:
+
+```sh
+PUT /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # [{name, url, headers?, expiresInSeconds?}], replaces them
+GET /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # name, slug, url and expiry, never headers
+```
+
+- Up to 10 servers. Each `name` (up to 100 characters) is shown to the model and names the tools: `mcpc__<slug>__<tool>`.
+- `headers` are encrypted and kept until the server expires: a day by default, at most a week (`expiresInSeconds`). They are never returned and never forwarded in the message.
+- Sending a list replaces the thread's servers; `[]` removes them.
+
+## How the agent uses them
+
+Before each message, the runtime fetches the thread's servers from the platform, lists their tools and offers them in that thread only. When the runtime restarts, it reinstalls every thread's servers, so a resumed reply keeps its tools.
+
+`AGENTS_CLIENT_MCP_MODE` decides how the agent reaches them: through the platform's gateway (`proxy`, the default), which adds the headers, or `direct`, where the runtime gets the URL and headers.
+
+## Things to know
+
+- Anyone who may use an agent can set the servers of a thread ID that doesn't exist yet, and a later private thread with that ID inherits them. Use random thread IDs.
+- These servers are separate from the MCP servers a template gives every thread of an agent ([Team MCP servers](/docs/teams/mcp-servers)).

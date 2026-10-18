@@ -1,0 +1,49 @@
+---
+title: Connected apps
+description: "Apps that act as you in Pi Durable Platform through OAuth Connect: allowing one, what it can do, how long it stays connected and how to disconnect it."
+---
+
+An app such as a chat app can reach your agents **as you**, once you connect it with **OAuth Connect**. Pi Durable Platform then gives the app its own tokens for you. The app never sees your password or your identity provider's tokens.
+
+## Connecting an app
+
+The app sends you to the platform. You sign in as usual, then see a page asking whether to allow the app. It names the app, the site that vouches for it, and what it will be able to do:
+
+- **See your agents and chat with them**
+- **Create agents in teams where you can**
+
+Choose **Allow** or **Deny**. Either way you go back to the app.
+
+<Screenshot slot="consent-page" />
+
+You're asked once per app: your answer is remembered until you disconnect it. Apps your platform admins marked **trusted** skip this page; you still sign in.
+
+An app that registered itself, instead of publishing a document on its own site, is shown as **Unverified**: its name is its own claim. Allow it only if you know where it comes from.
+
+## What an app can do
+
+A connected app acts as you **without your platform role**: an app you connect as a platform admin has no admin powers. It can:
+
+- list and use the agents of your teams and your personal workspace, and create agents where your role allows;
+- read and send messages, follow conversations, and rename or delete threads, as you;
+- read your teams, their models, MCP servers, usage and limits.
+
+It can't manage members, keys, service accounts, connected apps or anything in Admin. Every request is checked again against your account: if you're suspended or leave a team, the app loses that access at once. Messages it sends are recorded as yours, "via" the app.
+
+## Your connected apps
+
+Your account menu › **Connected apps** lists the apps you allowed, with when you connected them and when they were last used.
+
+<Screenshot slot="connected-apps" />
+
+**Disconnect…** (after you confirm) stops an app at once: all its tokens stop working and your consent is forgotten. To use it again, connect it again.
+
+## How long a connection lasts
+
+- The app's access tokens last an hour; it refreshes them itself.
+- A refresh token lasts 30 days and is replaced every time it's used, so an app you use at least monthly stays connected until you disconnect it.
+- If an old refresh token is used again more than 30 seconds after it was replaced, the platform treats it as stolen and ends the connection. You connect again.
+
+## Who else can see them
+
+Platform admins and auditors see your connected apps on your page in **Admin › Users**; platform admins can disconnect them. Nobody can see the tokens: the platform stores only digests.

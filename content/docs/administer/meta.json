@@ -1,0 +1,6 @@
+{
+  "title": "Administer",
+  "description": "For platform admins and auditors",
+  "root": true,
+  "pages": ["index", "people-and-teams", "template-review", "models", "mcp-servers", "settings", "usage", "audit-log", "reading-conversations"]
+}

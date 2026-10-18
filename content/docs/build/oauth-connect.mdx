@@ -1,0 +1,153 @@
+---
+title: OAuth Connect
+description: "Let your app act as a person in Pi Durable Platform: discovery, identifying your app with a metadata document or registration, authorization with PKCE, tokens, refresh rotation and its grace, revocation, and handling 401s."
+---
+
+With **OAuth Connect**, a person connects your app to Pi Durable Platform once, and your app then calls the API **as that person**: their personal workspace, their teams' agents, their private threads. The platform is a small OAuth 2.1 authorization server and issues its own opaque tokens, so this works whatever identity provider the platform uses. Your app never sees the person's password or identity provider tokens.
+
+All clients are **public**: no client secret. PKCE is required.
+
+## 1. Discover
+
+```sh
+curl https://agents.example.com/.well-known/oauth-authorization-server
+```
+
+returns the authorization server metadata (RFC 8414): the `issuer` (the platform's `APP_URL`), `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, `revocation_endpoint`, `scopes_supported: ["agents"]`, `code_challenge_methods_supported: ["S256"]`, and `client_id_metadata_document_supported: true`.
+
+`GET /.well-known/oauth-protected-resource` (RFC 9728) names the resource (the same `APP_URL`) and its authorization server. `GET /v1/auth/config` also has a `connect` object with the endpoints; its presence is how an app can tell that a platform supports OAuth Connect.
+
+## 2. Identify your app
+
+Choose one.
+
+### A Client ID Metadata Document (preferred)
+
+Publish a JSON document at an `https` URL with a path, on your app's site, and use that URL as your `client_id`:
+
+```json
+{
+  "client_id": "https://chat.example.com/oauth/client-metadata.json",
+  "client_name": "Example Corp Chat",
+  "redirect_uris": ["https://chat.example.com/connect/callback"],
+  "client_uri": "https://chat.example.com",
+  "logo_uri": "https://chat.example.com/logo.png"
+}
+```
+
+- `client_id` must equal the document's URL exactly (at most 500 characters, no query or fragment).
+- `redirect_uris` are `https`, or `http` on a loopback host.
+- `client_uri` and `logo_uri` are optional and shown only when `https`.
+
+The platform's server fetches the document when someone starts a connection (not on token requests): from public addresses only, without redirects or proxies, within 5 seconds, at most 16 KiB, and it must answer `200` with `Content-Type: application/json`. Serve it exactly at that URL, with no sign-in or trailing-slash redirect in front. It is cached for its `Cache-Control: max-age`, between 1 minute and 1 hour (10 minutes without one; `no-store` or `no-cache` mean 1 minute), so a change applies when the cached copy expires.
+
+Its host vouches for the name, and platform admins can mark such an app **trusted** so people skip the approval page. Don't list loopback redirect URIs in a production document: a trusted app's ID with a local redirect would let any local program get a code without the person seeing a page.
+
+### Dynamic Client Registration
+
+For development, or apps without a site, register once (RFC 7591):
+
+```sh
+curl -X POST https://agents.example.com/oauth/register -H "Content-Type: application/json" \
+  -d '{"client_name": "My dev app", "redirect_uris": ["http://localhost:5177/connect/callback"]}'
+```
+
+It returns a `client_id` starting `pdpcl_`. Keep it. A registered client unused for 30 days is deleted (an approval or a token, refreshes included, counts as use); register again then. Registered clients are never trusted, and the approval page says their name is unverified. Registration allows 10 requests a minute per address.
+
+## 3. Send the person to authorize
+
+Create a PKCE verifier and its S256 challenge, and a `state`, then send the person's browser to:
+
+```text
+https://agents.example.com/oauth/authorize
+  ?response_type=code
+  &client_id=https%3A%2F%2Fchat.example.com%2Foauth%2Fclient-metadata.json
+  &redirect_uri=https%3A%2F%2Fchat.example.com%2Fconnect%2Fcallback
+  &state=…
+  &code_challenge=…
+  &code_challenge_method=S256
+  &scope=agents
+```
+
+- `scope` is optional; `agents` is the only scope.
+- `resource`, if you send it, must be the platform's `APP_URL` (otherwise `invalid_target`).
+- Redirect URIs must match a registered one exactly, except that a **loopback** redirect matches on any port (RFC 8252). `localhost` and `127.0.0.1` are different hosts.
+- A parameter given twice is an error. Others the platform doesn't use are ignored; `prompt=none` and `login_hint` aren't supported.
+
+The person signs in to the platform as usual (so its sign-in rules, groups and suspension apply), then sees the approval page once. Approval is remembered, and trusted apps skip the page. Already signed in and approved, they come straight back without seeing anything. Do this as a top-level navigation the person starts, never in a hidden frame.
+
+Errors about the client or the redirect URI are shown to the person as a page, never redirected. Later errors come back to your redirect URI.
+
+On success the browser comes back with `code`, `state` and `iss`. **Check `state`, and check that `iss` is the issuer you discovered.**
+
+## 4. Exchange the code
+
+```sh
+curl -X POST https://agents.example.com/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d grant_type=authorization_code \
+  -d client_id=https://chat.example.com/oauth/client-metadata.json \
+  -d code=$CODE -d redirect_uri=https://chat.example.com/connect/callback \
+  -d code_verifier=$VERIFIER
+```
+
+```json
+{
+  "access_token": "pdpat_…",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "pdprt_…",
+  "scope": "agents"
+}
+```
+
+A code lives 60 seconds and works once. The access token lasts **1 hour**, the refresh token **30 days**. Keep tokens on your server, encrypted; never in the browser.
+
+## 5. Call the API
+
+```sh
+curl https://agents.example.com/v1/agents -H "Authorization: Bearer pdpat_…"
+```
+
+The token acts as the person **without their platform role**. It reaches the agent routes, template listings, their teams' models, usage, limits and MCP servers, and `GET /v1/me`, `GET /v1/teams` and `GET /v1/teams/{team}`. It can't reach administration, members, keys, service accounts or connected apps. `PUT …/agents/by-key/…` is for service accounts only: with a person's token, create agents with `POST /v1/teams/{team}/agents` (for example in their personal workspace, the team with `kind: personal` in `GET /v1/teams`) and keep the agent's ID.
+
+Every request checks the token, its connection and the person again: a suspended person, or one who left a team, loses that access at once. Requests count against the person's rate limit, shared with their browser and API keys. What your app does is recorded in the audit log as the person, via your app.
+
+## 6. Refresh
+
+```sh
+curl -X POST https://agents.example.com/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d grant_type=refresh_token -d client_id=… -d refresh_token=pdprt_…
+```
+
+Each refresh returns a **new pair** and retires the refresh token you sent. Keep only the newest.
+
+- **Within 30 seconds** of a refresh token's first use, presenting it again returns another valid pair. Nothing is revoked, and the first pair stays valid. This covers two of your servers refreshing at once.
+- **After 30 seconds**, presenting a retired refresh token is treated as theft: the whole connection is revoked, all its tokens stop working, the answer is `invalid_grant`, and the person must connect again.
+- A refresh doesn't end older access tokens; they expire after their hour.
+
+With several replicas, refresh under a lock and re-read the stored pair after taking it: if another replica already refreshed, use its pair. Refresh when a token is needed and close to expiry, not on a timer for everyone. The token endpoint allows 60 requests a minute per client address; over it, `429` with `error: "slow_down"` and `Retry-After`.
+
+## 7. Handle a refused token
+
+A refused token gets `401` with the usual error envelope (code `unauthorized`) and:
+
+```text
+WWW-Authenticate: Bearer resource_metadata="https://agents.example.com/.well-known/oauth-protected-resource", error="invalid_token"
+```
+
+That means expired, revoked or disconnected. Refresh once; if the refresh answers `400 {"error": "invalid_grant"}`, show the person a **Reconnect** step that starts again at step 3.
+
+## 8. Revoke
+
+```sh
+curl -X POST https://agents.example.com/oauth/revoke \
+  -H "Content-Type: application/x-www-form-urlencoded" -d token=pdprt_… -d client_id=…
+```
+
+Revoking a **refresh token** ends the whole connection; an access token, only itself. The answer is `200` whatever the token. Revoke when the person disconnects in your app or their account in your app is removed. They can also disconnect your app themselves in the platform (**Connected apps**), and platform admins can disconnect it for them.
+
+## Endpoints and errors
+
+The protocol endpoints answer OAuth errors (`{"error", "error_description"}`), not the `/v1` envelope. See [OAuth endpoints](/docs/api/oauth-endpoints) for each one.

@@ -1,0 +1,16 @@
+---
+title: Usage
+description: Every Pi Durable Platform team's model usage for platform admins and auditors, grouped by day, model, agent or team, with estimated cost.
+---
+
+**Admin › Usage** shows model usage across Pi Durable Platform: requests, input and output tokens, cache reads and writes, and **Estimated cost**, over a period of up to 366 days (UTC).
+
+<Screenshot slot="admin-usage" />
+
+Group by **Day**, **Team** or **Model**. The report covers every team and personal workspace. For one team's report per agent, open the team's **Usage** page.
+
+The numbers come from the same places as a team's report: the model gateway records proxied requests, and agents report requests to direct-mode providers and the platform's default model. The cost uses the models' current prices; set them in [Models](/docs/administer/models#prices-and-cost). Requests to unpriced models are counted but not costed.
+
+Usage covers model requests only: not runtime time, storage or MCP calls.
+
+Teams see their own report under **Usage**; see [Team usage](/docs/teams/usage). Through the API: [adminGetUsage](/docs/api/reference/models/adminGetUsage).

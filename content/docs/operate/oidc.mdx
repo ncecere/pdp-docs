@@ -1,0 +1,62 @@
+---
+title: OIDC sign-in
+description: "Connecting Pi Durable Platform to your identity provider: the client, verified emails, email domains, groups and OIDC_ALLOWED_GROUPS, the first admin, and what sign-in does and doesn't re-check."
+---
+
+Pi Durable Platform signs people in with any OpenID Connect provider. People never get passwords from the platform itself.
+
+## Register the client
+
+In your identity provider, create a confidential web client:
+
+- **Redirect URI**: `<APP_URL>/auth/callback`, for example `https://agents.example.com/auth/callback`.
+- **Scopes**: `openid`, `profile` and `email` (the default `OIDC_SCOPES`), plus whatever makes your provider send groups.
+
+Then set:
+
+```sh
+OIDC_ISSUER=https://idp.example.com
+OIDC_CLIENT_ID=pi-durable-platform
+OIDC_CLIENT_SECRET=...            # or OIDC_CLIENT_SECRET_FILE
+```
+
+The platform uses the authorization code flow with PKCE and a nonce, and verifies the ID token.
+
+## Email addresses
+
+Every person needs an email address, from the claim `OIDC_EMAIL_CLAIM` (`email` by default). It's how people are added to teams.
+
+- **Verified email required.** With `OIDC_REQUIRE_VERIFIED_EMAIL=true` (the default), sign-in is refused unless the ID token has `email_verified` set to true (the boolean or the string `"true"`). A provider that doesn't send `email_verified` refuses everyone until you either make it send the claim or set the variable to `false`. Turn it off only if your provider verifies every address itself, since adding people to teams trusts the address.
+- **Email domains.** `OIDC_ALLOWED_EMAIL_DOMAINS=example.com` refuses other domains.
+
+## Groups
+
+The platform stores each person's groups from the claim `OIDC_GROUPS_CLAIM` (`groups` by default; a list of strings or one string). Admins see them on the person's page.
+
+`OIDC_ALLOWED_GROUPS` limits who may sign in:
+
+```sh
+OIDC_ALLOWED_GROUPS=agents-users,agents-admins
+```
+
+Only people in at least one of these groups may sign in; others see "Your account is not in a group allowed to use this platform". The bootstrap admin may always sign in, so the platform can't be locked out. It needs `OIDC_GROUPS_CLAIM`. Groups don't map to roles: platform roles are set in **Admin › Users**, team roles by each team.
+
+<Callout type="warn" title="Groups are checked at sign-in">
+Group membership, email domain and verified email are checked when a person signs in. Removing someone from a group doesn't end their current browser session (up to `SESSION_TTL`, 12 hours by default), their personal API keys or their connected apps. To cut someone off at once, **Suspend…** them in **Admin › Users**: that ends their sessions and stops their keys and apps at the next request.
+</Callout>
+
+## The first platform admin
+
+Set `BOOTSTRAP_ADMIN_SUBJECT` to your `sub` claim. That identity becomes a platform admin on its first sign-in, once: a later demotion isn't undone by signing in again. You can leave it set.
+
+## Sign-in limits
+
+`LOGIN_ATTEMPTS_PER_MINUTE` (20) limits sign-in attempts per client address. Set `TRUSTED_PROXIES` so the platform sees real client addresses behind your ingress.
+
+## Apps and other identity providers
+
+Apps that act as people use the platform's own OAuth Connect tokens, never the identity provider's, so they work with any provider, including ones with opaque access tokens. People still sign in to the platform through the provider when they connect an app, so these rules apply. See [OAuth Connect](/docs/build/oauth-connect).
+
+## Development sign-in
+
+`DEV_AUTH=true` offers fixed personas instead of a provider, and is refused unless `APP_URL` is loopback. See [Try it locally](/docs/get-started/try-it-locally).

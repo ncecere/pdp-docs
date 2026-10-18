@@ -1,0 +1,68 @@
+---
+title: Team models and providers
+description: "The models a Pi Durable Platform team may use, and model providers a team adds for itself: kinds, the address guard, private networks, discovery and what other teams see."
+---
+
+A team's **Models** page in Pi Durable Platform has two tabs:
+
+- **Models**: every model the team may use. That is the platform's models published to the team (by platform admins, see [Models](/docs/administer/models)) and the team's own.
+- **Providers**: the team's own model providers, if it has any.
+
+<Screenshot slot="team-models" />
+
+Template versions and agents choose from these models. Pickers mark the team's own models.
+
+## Add a provider of the team's own
+
+Owners and admins can add a provider for the team, in the browser (never with a key or an app's token), while platform admins allow it.
+
+<Steps>
+<Step>
+
+**Providers › Add provider**. Choose its kind: **OpenAI**, **Anthropic**, **OpenAI-compatible (chat completions)**, **OpenAI Responses-compatible** or **Anthropic-compatible**.
+
+</Step>
+<Step>
+
+Enter its base URL (OpenAI and Anthropic have a default), its API key, and optionally extra headers sent with every request (up to 20).
+
+</Step>
+<Step>
+
+Open the provider and use **Discover models** to list what it offers, or **Add model manually** with its ID. For each model you can set the context window, the maximum output tokens, whether it accepts images and reasons, and its prices.
+
+</Step>
+</Steps>
+
+<Screenshot slot="team-provider-add" />
+
+The key and header values are encrypted and never shown again, to anyone. Members and editors see the providers and models, without keys.
+
+## The team's only
+
+A team's own models are available to that team alone. They never reach another team: not through its model list, a template, an agent's model or the model gateway. A personal workspace's own models are for that workspace only.
+
+So a team template that runs on one of the team's models can't be published to the catalog, and platform templates can't use team models.
+
+## Proxy only, through the address guard
+
+Agents reach a team's provider only through the platform's model gateway, which adds the key. The provider's address is the team's choice, so the platform guards it:
+
+- It must be `https`.
+- It must be a **public** address, or inside one of the **private networks** platform admins listed in **Admin › Settings**.
+- Loopback, link-local and cloud metadata addresses are never allowed.
+- The address is checked when you save it (`address_not_allowed`), and resolved and checked again on every connection, so a DNS change can't point it somewhere else later. Redirects aren't followed.
+
+If your provider is on your company network, ask your platform admins to add its network.
+
+## When adding is off
+
+Platform admins can stop teams adding providers (**Teams may add their own model providers** in **Admin › Settings**). Existing providers keep working and can still be changed or deleted. In a personal workspace, adding needs that switch and the personal workspace switch for providers.
+
+`GET /v1/teams/{team}/limits` says whether you may add one now (`canAddProviders`).
+
+## Change, turn off, delete
+
+Open a provider: **Models** and **Settings**. You can replace its key, turn it off, or delete it with its models. A provider or model still used by a template or an agent can't be deleted; move them first. Platform admins see every team's providers and can turn off, change or delete them.
+
+Changes are recorded in the team's audit log.

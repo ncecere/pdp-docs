@@ -1,0 +1,83 @@
+---
+title: Concepts
+description: Teams, personal workspaces, templates and the catalog, agents, threads, hibernating runtimes, models, MCP servers, service accounts, connected apps and roles in Pi Durable Platform.
+---
+
+This page names the parts of Pi Durable Platform and how they fit together. Each section links to the page that covers it in full.
+
+## Teams
+
+A **team** owns agents, templates, service accounts, and optionally its own model providers and MCP servers. Platform admins create teams and name their first owner. Owners and admins add members by email; someone who hasn't signed in yet gets an invite that applies at their first sign-in.
+
+Platform admins can archive a team. An archived team takes no new agents or templates, its members and service accounts can't be changed, and its service accounts' keys don't work until it is unarchived. See [Teams](/docs/teams).
+
+## Roles
+
+People have one **team role** per team:
+
+| Role | Can |
+|---|---|
+| Member | Use the team's agents (test chat, threads), see its members, service accounts, models, MCP servers, usage and limits |
+| Editor | Also deploy, change and upgrade agents, write team templates, read the team's audit log |
+| Admin | Also delete agents, manage members (not owners), service accounts and keys, the team's own providers and MCP servers, and ask to publish templates |
+| Owner | Also add and remove owners |
+
+And at most one **platform role**:
+
+- **Platform admin**: manages people and teams, reviews templates, runs the model and MCP catalogs and the platform's settings.
+- **Platform auditor**: sees what platform admins see, read-only.
+
+Platform roles never give access to conversations. The one exception is a platform admin reading a conversation **with a stated reason**, which is recorded in the team's audit log. See [Members and roles](/docs/teams/members-and-roles) and [Reading conversations](/docs/administer/reading-conversations).
+
+## Personal workspaces
+
+While platform admins have them turned on, everyone who signs in gets a **personal workspace**: a one-person team that only they can use. It deploys catalog templates only, has no other members or service accounts, and has its own limits (5 agents and 2 running at once by default). It is where an app connected with OAuth Connect usually creates a person's own agents. See [Your personal workspace](/docs/use/personal-workspace).
+
+## Templates and the catalog
+
+An agent is deployed from a **template**. A template has **versions**; each version holds the agent's instructions (its system prompt), the model it runs on, the MCP servers its agents get, and whether apps may give its agents their own MCP servers for a thread. Versions never change: an edit is a new version, and each agent stays on the version it has until someone upgrades it.
+
+- **Platform templates** are written by platform admins and are always in the catalog.
+- **Team templates** are private to their team. A team's owners and admins can ask to publish one; a platform admin approves it into the catalog or rejects it with a note.
+
+The **catalog** is what every team can deploy. See [Templates](/docs/teams/templates) and [Template review](/docs/administer/template-review).
+
+## Agents
+
+An **agent** is one deployed instance of a template, in one team, with a name that is unique in the team. It has its own conversations, its own database schema and role, and its own runtime when it runs.
+
+A **service-managed agent** is one an app creates with a service account key and its own **external key**, typically one per user of the app (`PUT …/agents/by-key/{externalKey}`). Only the team's service accounts talk to it. The team's owners and admins see that it exists and can delete it, but never read it. See [Deploying agents](/docs/teams/deploy-agents) and [Agents by key](/docs/build/agents-by-key).
+
+## Threads
+
+A conversation with an agent is a **thread**. The client names it (`threadId`, 1 to 64 letters, digits, dashes or underscores) and its first message creates it.
+
+A thread is **shared** (everyone who may use the agent sees it) or **private** (only the person or service account that started it). The first message chooses, and it never changes. Each message records its **author**. See [Shared and private threads](/docs/use/shared-and-private-threads).
+
+## Hibernating runtimes
+
+An agent runs only while it is used. When it has no reply in progress, no open event stream and no request for `AGENTS_IDLE_TIMEOUT` (10 minutes by default), it **hibernates**: its runtime stops and closes its database connection. The next request wakes it, and its conversations are where it left them because they live in PostgreSQL. Listing an agent's threads never wakes it; reading or writing a conversation does. An open event stream on a thread keeps the agent awake.
+
+How a runtime starts depends on the **launcher**: a local process (development), a Kubernetes pod, or a Kubernetes Agent Sandbox, optionally claimed from a warm pool of standby runtimes. See [Operate](/docs/operate).
+
+## Models and providers
+
+A **provider** is a model API: OpenAI, Anthropic, or a server compatible with OpenAI chat completions, the OpenAI Responses API or the Anthropic Messages API. Platform admins add providers and their **models**, and publish each model to every team, to chosen teams, and optionally to personal workspaces. A template version runs on a model; a team can pick another of its models for one agent.
+
+By default agents reach models through the platform's **model gateway** (proxy mode), which adds the provider's key, checks the model is allowed and records usage. Agents never see provider keys. Team owners and admins can also add providers of their team's own. See [Models](/docs/administer/models) and [Team models](/docs/teams/models).
+
+## MCP servers
+
+An **MCP server** gives agents tools (remote servers, Streamable HTTP). Platform admins add servers and publish them; teams can add their own. A template version gives its agents some or all of a server's tools. Apps can also give an agent their own MCP servers for one thread, when the template allows it. See [MCP servers](/docs/administer/mcp-servers), [Team MCP servers](/docs/teams/mcp-servers) and [Thread MCP servers](/docs/build/thread-mcp-servers).
+
+## Service accounts, API keys and connected apps
+
+There are three ways to call the API without a browser:
+
+- A **service account** is an identity a team owns, for apps and scripts. Its keys (`pdp_sa_…`) act in that team with the account's role, member or editor. See [Service accounts](/docs/teams/service-accounts).
+- A **personal API key** (`pdp_…`) acts as you. See [API keys](/docs/use/api-keys).
+- A **connected app** acts as the person who connected it with **OAuth Connect**, through tokens (`pdpat_…`) the platform issues itself, without the person's platform role. See [Connected apps](/docs/use/connected-apps) and [OAuth Connect](/docs/build/oauth-connect).
+
+## The audit log
+
+Every change is recorded in an append-only **audit log**, in the same database transaction as the change. A team's owners, admins and editors read its log; platform admins and auditors read the whole platform's. See [Team audit log](/docs/teams/audit-log) and [Audit log](/docs/administer/audit-log).

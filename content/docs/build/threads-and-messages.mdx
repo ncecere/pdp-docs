@@ -1,0 +1,100 @@
+---
+title: Threads, messages and events
+description: "Talking to a Pi Durable Platform agent from your app: listing agents and threads, sending messages, following a conversation over server-sent events, the conversation view, stopping, renaming, deleting and hibernating."
+---
+
+A conversation with a Pi Durable Platform agent is a **thread** named by your app. You send messages to it and follow it as **server-sent events**. Messages are accepted at once (`202`); the reply arrives on the thread.
+
+## Find the agent
+
+```sh
+GET /v1/agents                      # every agent of the caller's teams (a service account's own team)
+GET /v1/teams/{team}/agents         # one team's
+GET /v1/agents/{agentId}            # one
+```
+
+Each agent has its `teamId`, `teamSlug` and `teamName`, its template and version, its model, `enabled`, and `running` (whether its runtime is up now). `GET /v1/agents?includeManaged=true` also lists service-managed agents to a team's owners and admins, who can see but not use them; don't pass it with a person's token.
+
+## Threads
+
+Your app chooses each thread's ID: 1 to 64 letters, digits, dashes or underscores. **Use random IDs** (a UUID without braces works): thread IDs are per agent, and anyone who may use the agent could otherwise guess or pre-empt one.
+
+```sh
+GET    /v1/agents/{agentId}/threads                 # list, most recently used first
+GET    /v1/agents/{agentId}/threads/{threadId}      # the transcript and the reply in progress
+PATCH  /v1/agents/{agentId}/threads/{threadId}      # {"title": "…"}, 1 to 200 characters
+DELETE /v1/agents/{agentId}/threads/{threadId}      # stop it and remove it from the list
+```
+
+**Listing never wakes the agent**: the platform keeps a record of each thread. Each has `title` (by default the first line of its first message, up to 60 characters), `createdAt`, `updatedAt` (moves when a message is sent and when a reply ends), `busy`, `lastReplyAt`, `lastError` (why the last reply failed; absent when it succeeded), `visibility`, `createdBy` and `participants`. The list has every thread the caller may see, without paging. Reading a transcript, sending, stopping and deleting wake the agent.
+
+## Send a message
+
+```sh
+curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/messages \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"text": "What changed in last week'\''s release?", "requestId": "msg-7f3a", "visibility": "private"}'
+```
+
+| Field | |
+|---|---|
+| `text` | Required, up to 32,000 characters. Text only: no files or images. |
+| `requestId` | Idempotency key: a repeated one isn't submitted again. Send one with every message and reuse it on retries. |
+| `visibility` | `shared` (default) or `private`, chosen by the thread's **first** message. See [Private threads](/docs/build/private-threads). |
+| `mcpServers` | The MCP servers your user enabled for this thread. See [Thread MCP servers](/docs/build/thread-mcp-servers). |
+
+The answer is `202` with a `submissionId`. The first message creates the thread. A message sent while the agent is replying waits and runs after the current reply; it doesn't interrupt it. Don't set an author: the platform sets it from your credential.
+
+## Follow the conversation
+
+```sh
+curl -N https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/events -H "Authorization: Bearer $TOKEN"
+```
+
+The stream sends a `view` event after every change (at most about 10 a second), each carrying the **whole** conversation view, not a delta:
+
+```text
+event: view
+data: {"busy":true,"messages":[…],"partial":{"text":"The release added…","thinking":""},"tools":[…]}
+```
+
+| Field | |
+|---|---|
+| `busy` | A reply is running |
+| `messages` | The transcript: `user`, `assistant` and `tool` messages ([fields](/docs/build/private-threads#message-metadata)) |
+| `partial` | The reply being written: `text` and `thinking` |
+| `tools` | Tools running now: `callId`, `name`, `status` and `output` so far |
+
+Replace your view with each event's. `?once=true` sends the current view as one event and ends: the same as `GET` on the thread.
+
+**An open stream keeps the agent awake.** Close it when nobody is looking at the conversation; in a personal workspace, open streams can hold all its `maxRunning` places.
+
+## Follow every thread at once
+
+```sh
+curl -N https://agents.example.com/v1/agents/events -H "Authorization: Bearer $TOKEN"
+```
+
+One stream for every agent the caller may use: `event: ready` first, then `event: thread` with `{agentId, threadId, deleted, thread}` whenever a thread is created, renamed, starts or finishes a reply, or is deleted. `?agentId=` limits it to one agent. It **never wakes an agent**, so use it for inbox-style lists (unread, done) and keep that state in your app. It covers shared threads and the caller's own private ones.
+
+Both streams send a keep-alive comment every 15 seconds and end when the platform restarts (for example during a deploy). Reconnect with a little random delay. A slow reader may miss `thread` events: refresh a thread from `GET …/threads` if it looks stale.
+
+## Stop, hibernate, turn off
+
+```sh
+POST /v1/agents/{agentId}/threads/{threadId}/stop   # stop the reply in progress
+POST /v1/agents/{agentId}/hibernate                 # stop the runtime now; the next request wakes it
+```
+
+A stopped reply isn't an error. An agent that is turned off (`enabled: false`) refuses messages and reads with `409 agent_disabled`.
+
+## Waking and failures
+
+The first request to a hibernated agent starts its runtime, which takes a few seconds. While it starts, requests wait.
+
+- `503 agent_unavailable`: the agent couldn't be started in time. Retry with backoff.
+- `409 too_many_running`: a personal workspace is at its `maxRunning`. Close streams or wait for an agent to hibernate.
+- `409 agent_model_unavailable`: the agent's model was turned off or unpublished; someone must choose another.
+- A reply that fails shows in the transcript (an assistant message with `error`) and in the thread's `lastError`, for example when the model provider refuses the request. A message the agent couldn't answer at all also sets `lastError`, starting "No reply:".
+
+See [Errors and limits](/docs/build/errors-and-limits).

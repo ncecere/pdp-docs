@@ -1,0 +1,6 @@
+{
+  "title": "Get started",
+  "description": "What Pi Durable Platform is and how it works",
+  "root": true,
+  "pages": ["index", "concepts", "quick-tour", "try-it-locally"]
+}

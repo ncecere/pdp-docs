@@ -1,0 +1,58 @@
+---
+title: People and teams
+description: Managing users, platform roles and suspension, creating and archiving teams, assigning owners, and personal workspaces' limits in Pi Durable Platform.
+---
+
+## Users
+
+**Admin › Users** lists everyone who has signed in to Pi Durable Platform, with their platform role, status, last sign-in and how many teams they're on. Search by name or email.
+
+People appear the first time they sign in. You can't create them; you can add someone to a team by email before they sign in, which makes an invite.
+
+Open a person to see their profile (from the identity provider, as of their last sign-in, including their groups), their teams and role in each, their connected apps and their recent activity.
+
+<Screenshot slot="admin-user-detail" />
+
+Platform admins can:
+
+- **Change the platform role**: none, platform admin or platform auditor.
+- **Suspend…**: the person can't sign in, their sessions end, and their API keys and connected apps stop working at the next request. **Reactivate** undoes it.
+- **Disconnect** one of their connected apps.
+
+The last active platform admin can't be demoted or suspended.
+
+## Teams
+
+**Admin › Teams** lists every team and personal workspace, with its kind, owners and status. Filter by kind to see only teams or only personal workspaces.
+
+<Screenshot slot="admin-teams" />
+
+### Create a team
+
+**Create team**: a name, a slug (lower-case, used in URLs and the API; it can't change later), a description, and the **first owner's email**. If that person hasn't signed in yet, they get an invite and become the owner at their first sign-in.
+
+<Screenshot slot="admin-create-team" />
+
+### Manage a team
+
+Open a team: **Overview**, **Members** and **Settings**.
+
+- **Assign owner** makes someone an owner: it promotes a member, adds someone, or invites them.
+- **Settings** renames the team and changes its description.
+- **Archive team…** makes it read-only: no new agents or templates, no member or service account changes, and its service accounts' keys stop working. **Unarchive team** reverses it.
+
+Teams aren't deleted.
+
+## Personal workspaces
+
+A personal workspace's page has **Overview**, **Limits** and **Settings**.
+
+- The **Overview** shows its owner, its agents and running agents against its limits, and **Audit this workspace**: links to its agents' settings and status, its usage and its audit log. Platform staff never see its conversations; a platform admin can read one with a reason (see [Reading conversations](/docs/administer/reading-conversations)).
+- **Limits** overrides **Max agents**, **Max running at once** and **Monthly budget** for this workspace. Leave a field empty to use the platform's default. The defaults are in [Settings](/docs/administer/settings#personal-workspaces).
+- **Settings** can archive it, making it read-only.
+
+<Screenshot slot="admin-personal-workspace" />
+
+## Service accounts
+
+`GET /v1/admin/service-accounts` lists every team's service accounts for platform admins and auditors. In the console, open a team's **Service accounts** page from its overview.

@@ -1,0 +1,40 @@
+---
+title: Testing an agent
+description: "The Test tab of an agent in Pi Durable Platform's console: chats, what each message shows, stopping a reply and what wakes the agent."
+---
+
+Each agent in Pi Durable Platform has a **Test** tab: a chat with the agent, sending messages the same way an app would. Open it from the team's **Agents** (or **All agents**), then the agent, then **Test**. Every member of the team can use it; service-managed agents have no Test tab because their conversations belong to an app's users.
+
+<Screenshot slot="agent-test-chat" />
+
+## Chats
+
+The list on the left holds the conversations (threads) you can see, most recently used first. Each shows its title, whether a reply is running, and whether the last reply failed.
+
+- **New chat** starts a thread. Its title is the first line of your first message (up to 60 characters).
+- On a team's agent, choose **Shared** or **Private** before you send the first message. **Shared** means everyone who can use the agent sees it; **Private** means only you. The choice is fixed by the first message. See [Shared and private threads](/docs/use/shared-and-private-threads).
+- Delete a chat to stop it and remove it from the agent's list.
+
+The first time you open the tab it opens the most recently used chat.
+
+## What a message shows
+
+- **Your messages** show who sent them. On a shared thread that may be another member, or an app acting for someone.
+- **The agent's replies** stream in as they are written, with any reasoning and tool calls. Under each finished reply is a line such as `model-name · 1,234 tokens · 3.2s`: the model, the tokens it used, how long it took and, when it didn't end normally, why (for example **Length limit** or **Stopped**).
+- **Tool calls** show their input, their output and how long they ran.
+
+Older messages, from before the platform recorded these details, show what they have.
+
+## Stopping a reply
+
+While the agent is replying, the send button becomes a stop button. Stopping ends the reply in progress; the conversation keeps what was written so far. A message you send while a reply is running isn't lost: it waits, and the agent answers it after the current reply.
+
+## When the agent is asleep or off
+
+- An agent that has hibernated wakes on your message. The first reply takes a few seconds longer.
+- If the agent is **turned off** (in its **Settings**), the Test tab says so and refuses new messages. An editor can turn it on again.
+- If the agent's model is no longer available to the team, the agent won't start until an editor chooses another model in **Settings**.
+
+<Callout title="Conversations are durable">
+A conversation lives in the agent's own database schema. It survives reloads, platform restarts, the agent hibernating and the runtime being replaced. A reply cut short by a restart resumes when the agent next runs.
+</Callout>

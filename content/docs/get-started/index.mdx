@@ -1,0 +1,55 @@
+---
+title: What Pi Durable Platform is
+description: A self-hosted console and API where teams deploy, test and manage durable agents built with Pi, and reach them from their own apps.
+---
+
+Pi Durable Platform is a self-hosted console and API for **durable agents**: agents built with the durable package of [Pi](https://github.com/earendil-works/pi), an open-source agent toolkit by other people. Pi Durable Platform is an independent project. It runs those agents; it is not part of Pi.
+
+Teams use PDP to:
+
+- **deploy** agents from a catalog of reviewed templates;
+- **test** them in the console with a chat;
+- **reach** them from their own apps through the API, with a service account key or as a person who connected the app;
+- **manage** them: models, MCP servers, keys, usage and an audit log.
+
+PDP is the console and the API, not the end-user product. People usually talk to agents through a team's own app, such as a chat app or a support tool. The app calls PDP, and PDP relays the conversation to the agent.
+
+## How an agent runs
+
+Each agent keeps its conversations in **its own PostgreSQL schema**, with its own database role, in a database kept apart from the platform's own. Its conversations survive restarts and redeploys.
+
+An agent runs in **its own runtime** (a Node.js process with Pi's durable package) only while it is used. When it has been idle for a while (10 minutes by default) it **hibernates**: the runtime stops and nothing of it runs. The next request wakes it. So a platform can hold thousands of agents, one per user of an app, while only the busy ones run.
+
+```text
+Your app or the console ──► Pi Durable Platform ──► the agent's runtime ──► its schema in PostgreSQL
+                            (sign-in, roles, keys,     (started on demand,
+                             templates, models, audit)   hibernates when idle)
+```
+
+Apps never reach a runtime directly. Every request goes through the platform, which checks who is calling and what they may use, then relays the conversation as server-sent events.
+
+On Kubernetes each runtime is a pod, or a [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) with an optional warm pool of standby runtimes. On a developer's machine runtimes are local processes.
+
+## Who these docs are for
+
+<Cards>
+  <Card title="Use agents" href="/docs/use">Test an agent in the console, shared and private threads, your personal workspace, API keys and connected apps.</Card>
+  <Card title="Teams" href="/docs/teams">Deploy agents, write team templates, add the team's own models and MCP servers, service accounts, usage and the audit log.</Card>
+  <Card title="Administer" href="/docs/administer">Platform admins and auditors: people and teams, template review, the model and MCP catalogs, settings, usage and audit.</Card>
+  <Card title="Operate" href="/docs/operate">Install on Kubernetes, every setting, OIDC, the two databases, network isolation, backups, upgrades and security.</Card>
+  <Card title="Build apps" href="/docs/build">Reach agents from your app: keys, OAuth Connect, threads, messages and events.</Card>
+  <Card title="API reference" href="/docs/api">The OAuth endpoints and the management API, generated from its OpenAPI document.</Card>
+</Cards>
+
+## What it is not, yet
+
+PDP v0.1.0 is the first release and pre-1.0 software. Some things are planned and not built:
+
+- Teams can't upload their own agent code. Agents come from templates: instructions, a model and MCP servers. Uploads need stronger runtime isolation first.
+- There are no files or images. Messages are text.
+- Personal workspaces record a monthly budget but don't enforce it.
+- An agent that hibernates can't wake itself for scheduled work.
+
+See [Release notes v0.1.0](/docs/releases/v0-1-0) for the full list.
+
+Next: [Concepts](/docs/get-started/concepts).

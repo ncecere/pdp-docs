@@ -1,0 +1,85 @@
+---
+title: Deploying agents
+description: Deploy an agent from the catalog or a team template in Pi Durable Platform, its Overview and Settings, upgrading, changing its model, turning it off, hibernating and deleting it, and service-managed agents.
+---
+
+An agent in Pi Durable Platform is one deployed instance of a template, in one team. Editors, admins and owners deploy and change agents; admins and owners delete them.
+
+## Deploy one
+
+Choose **Deploy agent** on the team's **Agents** page, on **All agents**, or on a template's page in the **Catalog**.
+
+<Steps>
+<Step>
+
+Pick the **template**: one from the catalog, or one of the team's own. On a template's page it is already chosen.
+
+</Step>
+<Step>
+
+Pick the **team**, if you're an editor on more than one.
+
+</Step>
+<Step>
+
+Give it a **name**, unique in the team (1 to 100 characters on one line), and optionally a description.
+
+</Step>
+<Step>
+
+Leave **Model** on **Template's model**, or choose another model the team may use: the platform's models published to the team, and the team's own. You can change it later.
+
+</Step>
+</Steps>
+
+The agent opens on its **Test** tab. Deploying doesn't start it: its first message does.
+
+<Screenshot slot="deploy-dialog" />
+
+## Its pages
+
+An agent has these tabs:
+
+- **Overview**: its status (running now or hibernated, turned off), template and version, model, tools (the MCP servers it can call), storage, its usage over the last 30 days, and **Use it from your app** with example requests.
+- **Test**: a chat with it ([Testing an agent](/docs/use/test-chat)).
+- **Conversations**: only for platform staff ([Reading conversations](/docs/administer/reading-conversations)).
+- **Settings**: name, description and model; turning it off; deleting it.
+
+While the agent is running, its page header has **Hibernate**, which stops its runtime now; the next request wakes it. Any member can use it.
+
+<Screenshot slot="agent-overview" />
+
+## Upgrade to a new version
+
+An agent stays on the template version it was deployed with. When the template has a newer version, the Overview offers **Upgrade to v…**. You can also move it to any version, newer or older, with the API (`templateVersion`).
+
+A running agent hibernates at once and starts on the new version with its next message. Its conversations are kept.
+
+## Change its model
+
+In **Settings**, choose another model the team may use, or go back to **Template's model**. As with an upgrade, a running agent hibernates and starts on the new model with its next request. Each thread moves to the agent's current model with its next message, so older threads answer on the new model too.
+
+If a platform admin turns off or unpublishes the model an agent runs on, its Overview says **Its model isn't available** and the agent doesn't start until someone chooses another model.
+
+<Screenshot slot="agent-settings" />
+
+## Turn it off
+
+**Turn off agent** in **Settings** hibernates it and refuses new messages, from the console and from apps; its conversations are kept but can't be read until it's turned on again. Apps get an error on their next message.
+
+## Delete it
+
+**Delete agent** in **Settings** (owners and admins) deletes the agent, its database schema and role, and every conversation. Apps using it get errors. This can't be undone.
+
+## Service-managed agents
+
+An app with an editor [service account](/docs/teams/service-accounts) can create agents with its own **external key**, typically one per user of the app (see [Agents by key](/docs/build/agents-by-key)). These agents are **service-managed**:
+
+- Only the team's service accounts use them. Members don't see them at all.
+- The team's owners and admins see them in **Agents**, marked **Service-managed**, with their external key, status and last use, but never their conversations, and can delete them.
+- Editor service accounts can change and delete them.
+- They don't count towards the team's limit of 50 agents.
+
+## Names and limits
+
+Names are unique in the team, ignoring case, among agents made by hand. A team may have up to 50 agents made by hand. A personal workspace has its own limits: see [Your personal workspace](/docs/use/personal-workspace).

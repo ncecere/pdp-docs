@@ -1,0 +1,45 @@
+---
+title: Shared and private threads
+description: Who sees a conversation with an agent in Pi Durable Platform, how a thread's first message decides it, and what private threads don't hide.
+---
+
+Every conversation with an agent in Pi Durable Platform is a **thread**, and every thread is either **shared** or **private**.
+
+| | Shared | Private |
+|---|---|---|
+| Who sees it | Everyone who may use the agent: the team's members and its service accounts | Only the person or service account that started it |
+| Who can send to it | Anyone who sees it | Only its creator |
+| Team owners and admins | See it | Don't see it |
+| Platform admins | Only by reading it with a reason | Only by reading it with a reason |
+
+## The first message decides
+
+A thread's visibility is chosen with its **first message** and never changes. In the console you pick **Shared** or **Private** above the message box of a new chat. An app sends `"visibility": "private"` with the first message; without it, the thread is shared. Sending a different visibility later is refused.
+
+To change your mind, start a new chat.
+
+<Screenshot slot="test-chat-private" />
+
+## Private means invisible
+
+Another person's private thread isn't just locked: it doesn't appear in lists or event streams, and opening, sending to, stopping, renaming or deleting it answers "not found", exactly as for a thread that doesn't exist. Not even the team's owners and admins see it.
+
+The platform records who started a thread **before** it relays the first message to the agent, so a private thread is never briefly visible to others.
+
+## Who said what
+
+The platform records the author of every message: a person, or a service account, and for an app connected with OAuth Connect, the person **via** the app. Clients can't set the author themselves.
+
+On shared threads of a team's agent, the agent is told who is speaking: each message reaches the model with a first line such as `[Message from Sam Ortiz]`. Threads also list who started them and everyone who has sent to them.
+
+## Personal workspaces
+
+In your [personal workspace](/docs/use/personal-workspace) nobody else can use your agents, so the console doesn't offer the choice: threads there are shared, which means "yours".
+
+## What private threads don't hide
+
+A private thread hides a **conversation** from other people. It doesn't partition what the agent itself can reach. Every thread of an agent has the same instructions, model and MCP servers, and those MCP servers act with the same credentials in every thread: anything an MCP server stores is shared by everyone using that agent. If people need agents that hold nothing in common, give each one their own agent (for example in their personal workspace).
+
+## Platform admins
+
+Platform admins can list an agent's threads, private ones too (who started them and when), without the titles of private threads, and never their content. A platform admin can open one only by giving a reason, which is recorded in the team's audit log, where the team's owners see it. See [Reading conversations](/docs/administer/reading-conversations).

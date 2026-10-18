@@ -1,0 +1,128 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+@import '@fontsource-variable/inter';
+@import './brand.css';
+
+/*
+ * Fumadocs' theme variables, mapped onto Pi Durable Platform's brand tokens
+ * (brand.css), so the docs use the web app's indigo and slate neutrals in
+ * light and dark mode.
+ */
+:root,
+.light,
+.dark {
+  --color-fd-background: var(--pdp-bg);
+  --color-fd-foreground: var(--pdp-text);
+  --color-fd-muted: var(--pdp-surface-sunken);
+  --color-fd-muted-foreground: var(--pdp-text-muted);
+  --color-fd-popover: var(--pdp-surface-raised);
+  --color-fd-popover-foreground: var(--pdp-text);
+  --color-fd-card: var(--pdp-surface);
+  --color-fd-card-foreground: var(--pdp-text);
+  --color-fd-border: var(--pdp-border-emphasis);
+  --color-fd-primary: var(--pdp-link);
+  --color-fd-primary-foreground: var(--pdp-text-inverse);
+  --color-fd-secondary: var(--pdp-surface-sunken);
+  --color-fd-secondary-foreground: var(--pdp-text);
+  --color-fd-accent: var(--pdp-primary-subtle);
+  --color-fd-accent-foreground: var(--pdp-primary-subtle-text);
+  --color-fd-ring: var(--pdp-focus-ring);
+  --color-fd-overlay: rgba(11, 13, 18, 0.45);
+}
+
+/* Fumadocs' neutral theme darkens the sidebar in dark mode; keep the web app's. */
+.dark #nd-sidebar {
+  --color-fd-muted: var(--pdp-surface-sunken);
+  --color-fd-secondary: var(--pdp-surface-sunken);
+  --color-fd-muted-foreground: var(--pdp-text-muted);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Inter's alternate 1 and straight-sided 6/9, as the web app sets them. */
+body {
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Links in prose use the brand link colour and stay underlined (not colour alone). */
+.prose a:not([data-card]):not(.not-prose a) {
+  color: var(--pdp-link);
+  text-decoration-color: color-mix(in srgb, var(--pdp-link) 45%, transparent);
+}
+.prose a:not([data-card]):hover {
+  color: var(--pdp-link-hover);
+}
+
+/* Lock page scroll while a screenshot is enlarged (components/screenshot-zoom.tsx); the gutter stays, so nothing shifts. */
+html:has(dialog[data-zoom][open]) {
+  overflow: hidden;
+}
+
+/* A visible focus indicator everywhere (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--pdp-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* HTTP method labels in the API reference's sidebar. Text colours meet 4.5:1. */
+.api-method {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--pdp-text-muted);
+}
+.api-method[data-method='get'] {
+  color: var(--pdp-success-text);
+}
+.api-method[data-method='post'] {
+  color: var(--pdp-info-text);
+}
+.api-method[data-method='put'],
+.api-method[data-method='patch'] {
+  color: var(--pdp-warning-text);
+}
+.api-method[data-method='delete'] {
+  color: var(--pdp-danger-text);
+}
+
+/*
+ * Contrast fixes for third-party UI (WCAG 1.4.3):
+ * - the API reference's method labels use Tailwind's -600 greens, blues,
+ *   oranges, reds and yellows, too light on the off-white page; use the web
+ *   app's darker status colours instead (>= 4.5:1 on the page and accent tints);
+ * - the dark code theme's comments (#6a737d) are lightened on the near-black
+ *   dark surface.
+ */
+@theme {
+  --color-green-600: #0e6b3f;
+  --color-blue-600: #1d55c9;
+  --color-orange-600: #92560a;
+  --color-red-600: #b42318;
+  --color-yellow-600: #7a4508;
+}
+
+.dark .shiki span[style*='--shiki-dark:#6A737D'] {
+  --shiki-dark: #8b949e !important;
+}

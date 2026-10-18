@@ -1,0 +1,76 @@
+---
+title: Network isolation
+description: "Which connections Pi Durable Platform and its agent runtimes need, example NetworkPolicies, and the address guards the platform applies to teams' services and apps' metadata documents."
+---
+
+Pi Durable Platform is built so that agents need almost no network: in proxy mode they reach models and MCP servers only through the platform. Enforce that with NetworkPolicies. v0.1.0 ships none; the policies below are examples to adapt.
+
+## The connections
+
+| From | To | Port | Why |
+|---|---|---|---|
+| Your ingress | Platform | 8098 | Web app, API, OAuth |
+| Platform | Agent runtimes | 4100 | Relaying conversations, activation (warm pool) |
+| Agent runtimes | Platform gateway | 8099 | Models and MCP servers in proxy mode, thread and usage reports |
+| Platform, agent runtimes | PostgreSQL | 5432 | The platform: both databases. Runtimes: the agents database only |
+| Platform | Kubernetes API | 443/6443 | Starting and stopping runtimes |
+| Platform | Identity provider, model providers, MCP servers, apps' metadata documents | 443 | Sign-in, proxying, reading tools, OAuth Connect |
+| Agent runtimes | Direct-mode providers and MCP servers | 443 | Only if you use direct mode |
+| Everything | DNS | 53 | |
+
+Nothing else should reach the runtimes. In particular, agent pods should accept traffic from the platform alone, so one agent can't call another's runtime or activate a standby runtime of a warm pool.
+
+## Example policies
+
+In the agents' namespace: deny everything, then allow what runtimes need.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: agents, namespace: pi-durable-agents }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: pi-durable-platform } }
+          podSelector: { matchLabels: { app: pi-durable-platform } }
+      ports: [{ port: 4100 }]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: pi-durable-platform } }
+          podSelector: { matchLabels: { app: pi-durable-platform } }
+      ports: [{ port: 8099 }]
+    - to: [{ ipBlock: { cidr: 10.20.30.40/32 } }]   # PostgreSQL
+      ports: [{ port: 5432 }]
+    - to: [{ namespaceSelector: {}, podSelector: { matchLabels: { k8s-app: kube-dns } } }]
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+```
+
+In the platform's namespace, take traffic on 8098 from the ingress only and on 8099 from agent pods only:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: platform, namespace: pi-durable-platform }
+spec:
+  podSelector: { matchLabels: { app: pi-durable-platform } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress } } }]
+      ports: [{ port: 8098 }]
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: pi-durable-agents } } }]
+      ports: [{ port: 8099 }]
+```
+
+If you use direct-mode providers or MCP servers, or apps' MCP servers in direct mode (`AGENTS_CLIENT_MCP_MODE=direct`), allow agents' egress to those hosts too.
+
+## What the platform guards itself
+
+Some addresses are chosen by people other than the operator, so the platform checks them on every connection, whatever your network allows:
+
+- **Teams' own model providers and MCP servers**: `https`, a public address or one inside the **private networks** platform admins list in **Admin › Settings**; never loopback, link-local or cloud metadata addresses. The address is resolved and checked again at every connection and the connection is pinned to it, so DNS can't be changed to point it elsewhere later. Redirects and proxies from the environment aren't used.
+- **Apps' Client ID Metadata Documents** (OAuth Connect): public addresses only, no redirects, at most 16 KiB, 5 seconds.
+- **Apps' MCP servers for a thread**: only hosts in `AGENTS_CLIENT_MCP_HOSTS` (none by default).
+
+Platform-level providers and MCP servers that admins add aren't guarded, so admins can point them at internal services. Your NetworkPolicies decide what the platform itself may reach.

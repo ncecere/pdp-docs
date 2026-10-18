@@ -1,0 +1,62 @@
+---
+title: Quick tour
+description: Sign in to Pi Durable Platform, find your way around the console, deploy an agent from the catalog, test it and call it from an app.
+---
+
+This tour follows a team owner at Example Corp, whose Pi Durable Platform runs at `https://agents.example.com`. The names in the screenshots are made up.
+
+## Sign in
+
+Open the platform and choose **Sign in with single sign-on**. It sends you to your company's identity provider. Your administrators may limit sign-in to some groups of people; if you're refused, ask them.
+
+<Screenshot slot="sign-in" />
+
+## Home
+
+**Home** lists **Your teams** with your role in each. Platform admins and auditors also see a **Platform administration** card that opens the admin pages. If you aren't on a team yet, Home says so and, when your administrators set one up, links to where you request a team.
+
+<Screenshot slot="home" />
+
+The sidebar has three parts:
+
+- **The workspace**: **Home**, **All agents** (every agent of every team you're on) and **Catalog** (the templates every team can deploy).
+- **The team switcher**: choose **Personal** (your [personal workspace](/docs/use/personal-workspace)) or one of **Your teams**. The team's pages follow: **Overview**, **Agents**, **Templates**, **Models**, **MCP servers**, **Usage**, **Service accounts** and **Team settings**. You see the pages your role allows.
+- **Your name** at the bottom opens your account menu: **Profile**, **API keys**, **Connected apps**, the colour theme, help (if your administrators set a link) and **Sign out**.
+
+## Deploy an agent
+
+<Steps>
+<Step>
+
+Open **Catalog** and pick a template. Its **Overview** shows the instructions of its current version; **Versions** lists every version.
+
+<Screenshot slot="catalog" />
+
+</Step>
+<Step>
+
+Choose **Deploy agent**. Pick the team, give the agent a name that is unique in the team, and optionally choose another model the team may use. Deploying needs the editor role or above.
+
+<Screenshot slot="deploy-dialog" />
+
+</Step>
+<Step>
+
+The agent opens on its **Test** tab. Send a message. The first one wakes the agent, which takes a few seconds; after that, replies stream in.
+
+</Step>
+</Steps>
+
+## Test it
+
+The **Test** tab is a chat, the same conversation an app would have. Conversations are durable: they survive reloads, restarts and hibernation. **New chat** starts another thread. On a team's agent you choose whether a new chat is **Shared** or **Private**. See [Testing an agent](/docs/use/test-chat).
+
+## Use it from an app
+
+The agent's **Overview** tab has a **Use it from your app** card with the requests an app sends: one agent per user of the app, send a message, follow the conversation. An app calls them with a [service account](/docs/teams/service-accounts) key, or as a person who connected it with [OAuth Connect](/docs/build/oauth-connect). Start with [Build apps](/docs/build).
+
+<Screenshot slot="agent-overview" />
+
+## Watch what it costs
+
+**Usage** shows the team's model requests and tokens per day, model or agent, with an estimated cost when platform admins have set the models' prices. See [Usage](/docs/teams/usage).

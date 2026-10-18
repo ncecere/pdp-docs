@@ -1,0 +1,106 @@
+---
+title: OAuth endpoints
+description: "Reference for Pi Durable Platform's OAuth Connect endpoints: /.well-known/oauth-authorization-server, /.well-known/oauth-protected-resource, /oauth/authorize, /oauth/token, /oauth/register and /oauth/revoke."
+---
+
+These endpoints make Pi Durable Platform an OAuth 2.1 authorization server for [OAuth Connect](/docs/build/oauth-connect). They answer OAuth's formats, not the `/v1` envelope: errors are `{"error": "…", "error_description": "…"}`, and token responses are sent with `Cache-Control: no-store`. The issuer and the protected resource are both the platform's `APP_URL`.
+
+| Endpoint | Rate limit per client address |
+|---|---|
+| `GET /.well-known/oauth-authorization-server` | none |
+| `GET /.well-known/oauth-protected-resource` | none |
+| `GET /oauth/authorize` | 60 a minute |
+| `POST /oauth/token` | 60 a minute |
+| `POST /oauth/revoke` | 60 a minute |
+| `POST /oauth/register` | 10 a minute |
+
+Over a limit: `429`, `{"error": "slow_down"}` and `Retry-After`. A `GET` on a POST-only endpoint answers `405` with `Allow: POST`.
+
+## GET /.well-known/oauth-authorization-server
+
+Authorization server metadata (RFC 8414), cacheable for 60 seconds:
+
+```json
+{
+  "issuer": "https://agents.example.com",
+  "authorization_endpoint": "https://agents.example.com/oauth/authorize",
+  "token_endpoint": "https://agents.example.com/oauth/token",
+  "registration_endpoint": "https://agents.example.com/oauth/register",
+  "revocation_endpoint": "https://agents.example.com/oauth/revoke",
+  "scopes_supported": ["agents"],
+  "response_types_supported": ["code"],
+  "response_modes_supported": ["query"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "token_endpoint_auth_methods_supported": ["none"],
+  "revocation_endpoint_auth_methods_supported": ["none"],
+  "code_challenge_methods_supported": ["S256"],
+  "client_id_metadata_document_supported": true,
+  "authorization_response_iss_parameter_supported": true
+}
+```
+
+## GET /.well-known/oauth-protected-resource
+
+Protected resource metadata (RFC 9728). A refused app token's `WWW-Authenticate` header points here.
+
+```json
+{
+  "resource": "https://agents.example.com",
+  "authorization_servers": ["https://agents.example.com"],
+  "scopes_supported": ["agents"],
+  "bearer_methods_supported": ["header"],
+  "resource_name": "Pi Durable Platform"
+}
+```
+
+`resource_name` is the instance's `INSTANCE_NAME`.
+
+## GET /oauth/authorize
+
+| Parameter | |
+|---|---|
+| `response_type` | `code` |
+| `client_id` | A metadata document URL, or a registered `pdpcl_…` ID |
+| `redirect_uri` | One of the client's; loopback redirects match on any port |
+| `state` | Your value, returned unchanged |
+| `code_challenge`, `code_challenge_method` | PKCE, `S256` only, required |
+| `scope` | Optional, `agents` |
+| `resource` | Optional; must be `APP_URL` (else `invalid_target`) |
+
+- Without a session, it sends the person to the platform's sign-in and back.
+- Signed in, with the app already allowed or trusted, it redirects straight back with a code. Otherwise it shows the consent page (`/connect/consent` in the web app).
+- A suspended person gets an error page (`access_denied`).
+- Problems with the request before the client and redirect URI are known good (an unknown or expired client, an unregistered redirect URI, a repeated parameter, an overlong query) are shown as an HTML page, never redirected. Later problems redirect to the app with `error`.
+- Success redirects with `code`, `state` and `iss` (RFC 9207).
+
+## POST /oauth/token
+
+Form-encoded (`application/x-www-form-urlencoded`). `client_id` in the form, or as the user of a Basic `Authorization` header with an empty password.
+
+**Authorization code**: `grant_type=authorization_code`, `client_id`, `code`, `redirect_uri`, `code_verifier`. Codes last 60 seconds and are used once.
+
+**Refresh**: `grant_type=refresh_token`, `client_id`, `refresh_token`. Returns a new pair and retires the old refresh token; reuse within 30 seconds returns another pair, reuse later revokes the connection (`invalid_grant`).
+
+```json
+{"access_token": "pdpat_…", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "pdprt_…", "scope": "agents"}
+```
+
+Access tokens last 1 hour, refresh tokens 30 days. Errors: `invalid_request`, `invalid_grant` (a bad, expired, used or revoked code or refresh token, a wrong verifier or redirect URI), `invalid_client`, `unsupported_grant_type`, `invalid_scope`, `invalid_target`.
+
+## POST /oauth/register
+
+Dynamic Client Registration (RFC 7591), JSON, at most 16 KiB. Public clients only: send `client_name` and `redirect_uris` (`https`, or `http` on a loopback host); `client_uri`, `logo_uri` and `application_type` (`web` or `native`) are optional. The answer has a `client_id` starting `pdpcl_`. A client unused for 30 days is deleted.
+
+## POST /oauth/revoke
+
+Token revocation (RFC 7009), form-encoded: `token` (an access or refresh token) and optionally `client_id`. Revoking a refresh token ends the connection and every token in it; an access token, only itself. Answers `200` whatever the token.
+
+## Tokens on the API
+
+Send access tokens as `Authorization: Bearer pdpat_…` to `/v1` routes that take bearer credentials. A token that is invalid, expired or revoked gets `401` with:
+
+```text
+WWW-Authenticate: Bearer resource_metadata="https://agents.example.com/.well-known/oauth-protected-resource", error="invalid_token"
+```
+
+The consent page and connected apps use `/v1` operations of their own: [getOAuthConsent](/docs/api/reference/oauth/getOAuthConsent), [decideOAuthConsent](/docs/api/reference/oauth/decideOAuthConsent), [listMyOAuthGrants](/docs/api/reference/oauth/listMyOAuthGrants), [revokeMyOAuthGrant](/docs/api/reference/oauth/revokeMyOAuthGrant), and for platform admins the trusted apps ([adminUpdateTrustedClients](/docs/api/reference/oauth/adminUpdateTrustedClients)).

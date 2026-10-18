@@ -1,0 +1,40 @@
+---
+title: Administering the platform
+description: Platform admins and auditors in Pi Durable Platform, the admin pages, the first admin, and what platform roles never reach.
+---
+
+Pi Durable Platform has two platform roles:
+
+- **Platform admins** manage people and teams, review templates, run the model and MCP catalogs, and change the platform's settings.
+- **Platform auditors** see everything platform admins see, read-only. Settings pages tell them: "You can view these settings. Only platform admins can change them."
+
+Everyone else has no platform role. Platform roles are separate from team roles: a platform admin who is also a team's member has that member's role there.
+
+## The admin pages
+
+Home shows platform staff a **Platform administration** card; it opens **Admin**. Its sidebar:
+
+| Group | Page | What |
+|---|---|---|
+| People | **Users** | Everyone who has signed in: platform roles, suspension, teams, connected apps ([People and teams](/docs/administer/people-and-teams)) |
+| | **Teams** | Teams and personal workspaces: create, owners, archive, limits ([People and teams](/docs/administer/people-and-teams)) |
+| Records | **Templates** | Platform templates and the review queue ([Template review](/docs/administer/template-review)) |
+| | **Models** | Providers and models, publishing, prices ([Models](/docs/administer/models)) |
+| | **MCP servers** | The MCP catalog ([MCP servers](/docs/administer/mcp-servers)) |
+| | **Usage** | Every team's model usage and cost ([Usage](/docs/administer/usage)) |
+| | **Audit log** | Every change and sign-in on the platform ([Audit log](/docs/administer/audit-log)) |
+| | **Settings** | Personal workspaces, team providers and MCP servers, private networks, trusted apps ([Settings](/docs/administer/settings)) |
+
+<Screenshot slot="admin-users" />
+
+Admin pages need a browser session. API keys and connected apps can't reach them, even a platform admin's.
+
+## The first platform admin
+
+Set `BOOTSTRAP_ADMIN_SUBJECT` to your OIDC subject (the `sub` claim) before you first sign in. That identity becomes a platform admin on its first sign-in, once. After that, make more admins in **Admin › Users**. The platform refuses to demote or suspend its last active platform admin. See [OIDC sign-in](/docs/operate/oidc).
+
+## What platform roles never reach
+
+Platform roles never give access to conversations. Platform admins and auditors see that agents exist, their settings and status, their usage and the audit log, but not what was said. The one exception is deliberate and recorded: a platform admin can read one conversation by giving a reason, which goes into the team's audit log where its owners see it. See [Reading conversations](/docs/administer/reading-conversations).
+
+Platform staff can open a shared team's pages, except its **Agents**, to look; they can audit a personal workspace's agents. They don't use a team's agents unless they are its members.

@@ -1,0 +1,57 @@
+---
+title: Release notes v0.1.0
+description: "Pi Durable Platform v0.1.0 (2026-10-18), the first release: what's in it, the images, requirements and known limitations."
+---
+
+Pi Durable Platform v0.1.0, released on 2026-10-18, is the first release. Every install of it is a first install. It is development software: it has run only in the maintainer's own deployment so far.
+
+Pi Durable Platform is an independent project. It runs agents built with Pi and its durable package, and is not affiliated with or endorsed by Pi's authors.
+
+## What's in it
+
+- **Teams and roles.** Platform admins and auditors; team owners, admins, editors and members; invites. See [Members and roles](/docs/teams/members-and-roles).
+- **Personal workspaces.** A one-person team for each person who signs in, while turned on; catalog templates only; default and per-workspace limits. See [Your personal workspace](/docs/use/personal-workspace).
+- **Templates and a reviewed catalog.** Versioned platform and team templates; agents pinned to a version, upgraded or rolled back by hand; team templates published after a platform admin's review. See [Templates](/docs/teams/templates).
+- **Agents with their own storage.** One PostgreSQL schema and role per agent in a separate agents database, with a single writer per agent. Service-managed agents by external key for apps. See [Deploying agents](/docs/teams/deploy-agents).
+- **Launchers and hibernation.** Local processes (development), Kubernetes pods, Kubernetes Agent Sandbox with optional warm pools. Idle agents hibernate after 10 minutes and wake on the next request. See [Operate](/docs/operate).
+- **Model catalog.** OpenAI, Anthropic and compatible providers, model discovery, publishing to teams and personal workspaces, proxy or direct access, teams' own providers, prices and usage reports with estimated cost. See [Models](/docs/administer/models).
+- **MCP catalog.** Platform and team remote MCP servers, per-version tool selection, a logging MCP proxy, and MCP servers apps supply for one thread. See [MCP servers](/docs/administer/mcp-servers).
+- **Threads.** A record of every thread (listing never wakes an agent), status, an event stream for every agent, shared and private threads, message authors and metadata, and platform admins' audited reads with a reason. See [Shared and private threads](/docs/use/shared-and-private-threads).
+- **Access for apps.** Service accounts with expiring keys, personal API keys, and OAuth Connect. See [Build apps](/docs/build).
+- **Audit log, doctor, safety checks, sealed secrets and peppered key digests.** See [Security model](/docs/operate/security).
+
+## Images
+
+| Image | |
+|---|---|
+| `ghcr.io/ncecere/pi-durable-platform:v0.1.0` | The platform: distroless, user 65532, read-only root filesystem |
+| `ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.0` | The agent runtime: Node.js 22, user 10001, read-only root filesystem with a writable `/tmp` |
+
+Both are for linux/amd64 and linux/arm64. Deploy by digest; the digests, SBOMs and checksums are on the [GitHub release](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.0). Verify the signatures with cosign v3 or newer, as in [Install on Kubernetes](/docs/operate/kubernetes#1-the-images). The database is at migration 16.
+
+## Requirements
+
+PostgreSQL 17 with two databases, an OIDC provider, HTTPS, Kubernetes for the agent runtimes (and Agent Sandbox for that launcher), and at least one model provider. See [Running Pi Durable Platform](/docs/operate).
+
+## Known limitations
+
+- **One platform replica.** The idle reaper only knows the event streams open on its own replica; several replicas haven't been tested.
+- **Budgets aren't enforced.** A personal workspace's monthly budget is recorded only. Shared teams have no limit on running agents.
+- **No scheduled wake-ups.** A hibernated agent wakes only on a request.
+- **Text only.** No files, images or object storage.
+- **No tool approvals.** Agents call the tools their template version allows without asking.
+- **Whole-view events.** A thread's event stream sends the whole conversation view on each change, not deltas.
+- **No paging** of thread lists or conversations.
+- **OAuth Connect** doesn't support `login_hint` or `prompt=none`; the only scope is `agents`.
+- **No agent transfer** between teams or workspaces.
+- **Messages always queue** behind a running reply; steering a reply isn't exposed.
+- **Fixed runtime resources**: agent pods request 50m CPU and 160 MiB, limited to 1 CPU and 512 MiB.
+- **No re-encryption command**: keep `ENCRYPTION_KEY_PREVIOUS` until every sealed value has been saved again.
+- **No deployment manifests** (Helm, Kustomize, NetworkPolicies), no metrics endpoint, dashboards or tracing.
+- **No uploaded agent code**: templates only, until sandboxed runtimes are in place. Advisory locks are database-wide, and database roles server-wide.
+- **Thread IDs are chosen by clients**: use random ones.
+- Pi's durable package is pinned to 1.3.0; its storage conformance suite guards every upgrade.
+
+## Planned
+
+On the project's plan, not built: files and images on object storage (per agent), budget enforcement, incremental event streams, and stronger runtime isolation before teams can upload agent code.

@@ -1,0 +1,19 @@
+---
+title: Releases
+description: Pi Durable Platform's releases, the images each one ships, and how the docs follow them.
+---
+
+These docs describe **Pi Durable Platform v0.1.0**, the first release, from 2026-10-18.
+
+| Release | Date | Notes |
+|---|---|---|
+| v0.1.0 | 2026-10-18 | [Release notes](/docs/releases/v0-1-0) |
+
+Each release ships two images, for linux/amd64 and linux/arm64, signed with cosign keyless signing:
+
+- `ghcr.io/ncecere/pi-durable-platform`: the platform;
+- `ghcr.io/ncecere/pi-durable-platform-runtime`: the agent runtime the platform starts for each agent.
+
+The project's [releases on GitHub](https://github.com/ncecere/pi-durable-platform/releases) carry the image digests, SBOMs and checksums. The full list of changes is the repository's `CHANGELOG.md`.
+
+Pi Durable Platform follows semantic versioning. Before 1.0, a minor release may include breaking changes; its notes say how to adapt. Upgrading is described in [Upgrades and migrations](/docs/operate/upgrades).

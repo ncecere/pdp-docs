@@ -1,0 +1,266 @@
+{
+  "sign-in": {
+    "files": [
+      "sign-in"
+    ],
+    "alt": "The Pi Durable Platform sign-in page of the Example Corp Agents instance: the instance name and a card with the button \"Sign in with single sign-on\"."
+  },
+  "home": {
+    "files": [
+      "home"
+    ],
+    "alt": "Home for Sam Ortiz: \"Your teams\" listing Support (owner) and Data Platform (editor), with the sidebar's Home, All agents and Catalog, the team switcher and Sam's name at the bottom."
+  },
+  "all-agents": {
+    "files": [
+      "all-agents"
+    ],
+    "alt": "All agents: a table of agents from Sam's teams and personal workspace (name, team, template, model, status, last used), a search box and the \"Deploy agent\" button."
+  },
+  "catalog": {
+    "files": [
+      "catalog"
+    ],
+    "alt": "The Catalog: platform templates and published team templates as a list with name, owner and description, including Assistant and Helpdesk triage (from the Support team)."
+  },
+  "deploy-dialog": {
+    "files": [
+      "deploy-dialog"
+    ],
+    "alt": "The \"Deploy Helpdesk triage\" dialog: Team set to Support, Name \"Helpdesk assistant\", an optional description, Model on \"Template's model\", and the \"Deploy agent\" button."
+  },
+  "agent-overview": {
+    "files": [
+      "agent-overview"
+    ],
+    "alt": "The Overview tab of the Helpdesk assistant agent: status (hibernated), template and version, model, tools from two MCP servers, storage, usage over the last 30 days, and the \"Use it from your app\" card with curl examples."
+  },
+  "agent-test-chat": {
+    "files": [
+      "agent-test-chat"
+    ],
+    "alt": "The Test tab of Helpdesk assistant: the list of chats on the left with \"New chat\", and an open conversation with a user message and a streamed reply, a tool call and the line with model, tokens and time under the reply."
+  },
+  "test-chat-private": {
+    "files": [
+      "test-chat-private"
+    ],
+    "alt": "A new chat on a team agent's Test tab: the Shared and Private toggle above the message box, Private chosen, with the hint \"Only you\"."
+  },
+  "agent-settings": {
+    "files": [
+      "agent-settings"
+    ],
+    "alt": "The Settings tab of an agent: name, description, the Model picker on \"Template's model\", the \"Turn off agent\" section and the Delete this agent section."
+  },
+  "personal-workspace": {
+    "files": [
+      "personal-workspace"
+    ],
+    "alt": "Sam Ortiz's personal workspace Overview: \"Your own workspace: deploy agents from the catalog and use them on your own.\", with the Limits card showing 1 of 5 agents and 0 of 2 running."
+  },
+  "api-keys": {
+    "files": [
+      "api-keys"
+    ],
+    "alt": "Account › API keys: a table of Sam's personal keys (name, created, expires, last used) with the \"Create API key\" button."
+  },
+  "api-key-created": {
+    "files": [
+      "api-key-created"
+    ],
+    "alt": "The \"API key created\" notice after creating a key named \"Deploy script on my laptop\": the secret starting with pdp_ in a copy field and \"Copy this key now.\""
+  },
+  "consent-page": {
+    "files": [
+      "consent-page"
+    ],
+    "alt": "The OAuth Connect approval page for \"Example Corp Chat\" (chat.example.com): \"See your agents and chat with them\", \"Create agents in teams where you can\", and the Allow and Deny buttons."
+  },
+  "connected-apps": {
+    "files": [
+      "connected-apps"
+    ],
+    "alt": "Account › Connected apps: Example Corp Chat, verified by chat.example.com, connected and last used dates, with \"Disconnect…\" on its row."
+  },
+  "team-overview": {
+    "files": [
+      "team-overview"
+    ],
+    "alt": "The Support team's Overview: Sam's role (Owner), the owners, admins and editors, Recent changes from the audit log, and the team's limits."
+  },
+  "team-members": {
+    "files": [
+      "team-members"
+    ],
+    "alt": "Team settings › Members for Support: members with their roles, the \"Add member\" button, and one open invite."
+  },
+  "team-templates": {
+    "files": [
+      "team-templates"
+    ],
+    "alt": "The Support team's Templates page: Helpdesk triage (published) and Release notes writer (private), with the \"New template\" button."
+  },
+  "template-versions": {
+    "files": [
+      "template-versions"
+    ],
+    "alt": "The Versions tab of Helpdesk triage: versions 3, 2 and 1 with their notes, model and date, and the \"New version\" button."
+  },
+  "template-submit": {
+    "files": [
+      "template-submit"
+    ],
+    "alt": "A team template waiting for review: the \"Waiting for review\" notice and the \"Withdraw the request\" action on its page."
+  },
+  "team-models": {
+    "files": [
+      "team-models"
+    ],
+    "alt": "The Support team's Models page, Models tab: platform models published to the team and one of the team's own, marked as the team's."
+  },
+  "team-provider-add": {
+    "files": [
+      "team-provider-add"
+    ],
+    "alt": "The \"Add provider\" dialog on a team's Models › Providers tab: type, name, an https base URL on the company network, the API key and extra headers."
+  },
+  "team-mcp-servers": {
+    "files": [
+      "team-mcp-servers"
+    ],
+    "alt": "The Support team's MCP servers page, Available tab: the team's own Ticket search server listed first, then platform servers published to the team."
+  },
+  "service-accounts": {
+    "files": [
+      "service-accounts"
+    ],
+    "alt": "The Support team's Service accounts: helpdesk-chat (editor, enabled, last used today) and reports-bot (member), with \"Create service account\"."
+  },
+  "service-account-key-created": {
+    "files": [
+      "service-account-key-created"
+    ],
+    "alt": "The \"Key created\" notice for the helpdesk-chat service account: the secret starting with pdp_sa_, \"Copy this key now.\" and \"Next: finish the rotation\"."
+  },
+  "team-usage": {
+    "files": [
+      "team-usage"
+    ],
+    "alt": "The Support team's Usage page: period, Group by Agent, a chart of tokens per day and a table of requests, tokens and estimated cost per agent."
+  },
+  "team-audit": {
+    "files": [
+      "team-audit"
+    ],
+    "alt": "Team settings › Audit log for Support: entries such as \"Deployed agent\", \"Created service account key\" and \"Read a private conversation\", with Action and Person filters and Hide sign-ins."
+  },
+  "admin-users": {
+    "files": [
+      "admin-users"
+    ],
+    "alt": "Admin › Users: a table of people (name, email, platform role, status, teams, last sign-in) with the admin sidebar groups People and Records, and Settings."
+  },
+  "admin-user-detail": {
+    "files": [
+      "admin-user-detail"
+    ],
+    "alt": "Admin › Users › Jordan Lee: profile and groups from the identity provider, platform role, teams and roles, connected apps, and the Suspend… action."
+  },
+  "admin-teams": {
+    "files": [
+      "admin-teams"
+    ],
+    "alt": "Admin › Teams: teams and personal workspaces with their kind, owners and status, filtered to show both kinds, and the \"Create team\" button."
+  },
+  "admin-create-team": {
+    "files": [
+      "admin-create-team"
+    ],
+    "alt": "The \"Create team\" dialog: name Data Platform, slug data-platform, a description, and the first owner's email."
+  },
+  "admin-personal-workspace": {
+    "files": [
+      "admin-personal-workspace"
+    ],
+    "alt": "Admin › Teams › a personal workspace's Overview: its owner, agents and running agents against its limits, and the \"Audit this workspace\" card."
+  },
+  "admin-templates-review": {
+    "files": [
+      "admin-templates-review"
+    ],
+    "alt": "Admin › Templates: the review queue with Release notes writer from the Data Platform team waiting for review, then every template."
+  },
+  "admin-review-dialog": {
+    "files": [
+      "admin-review-dialog"
+    ],
+    "alt": "The review dialog for a team template: Approve and Reject, with the \"Note to the team\" field required to reject."
+  },
+  "admin-models-providers": {
+    "files": [
+      "admin-models-providers"
+    ],
+    "alt": "Admin › Models, Providers tab: two providers (an Anthropic-compatible gateway and an OpenAI-compatible one), their type, access mode and model count, with the Owner filter and \"Add provider\"."
+  },
+  "admin-provider-models": {
+    "files": [
+      "admin-provider-models"
+    ],
+    "alt": "A provider's Models tab with the \"Discover models\" list: models the provider offers, some already added, checkboxes to add others."
+  },
+  "admin-model-edit": {
+    "files": [
+      "admin-model-edit"
+    ],
+    "alt": "The \"Edit model\" form: name, context window, max output tokens, Accepts images, Reasoning, input and output price per million tokens, and \"Who may use it\" with All teams and Personal workspaces."
+  },
+  "admin-mcp-servers": {
+    "files": [
+      "admin-mcp-servers"
+    ],
+    "alt": "Admin › MCP servers: platform servers and one team's own (Owner filter on All owners), with access mode, who may use it and tool count, and \"Add MCP server\"."
+  },
+  "admin-mcp-server-tools": {
+    "files": [
+      "admin-mcp-server-tools"
+    ],
+    "alt": "An MCP server's Tools tab: its tools with their descriptions, the last time they were read, and \"Refresh tools\"."
+  },
+  "admin-settings": {
+    "files": [
+      "admin-settings"
+    ],
+    "alt": "Admin › Settings: the Personal workspaces section (switches, Max agents 5, Max running at once 2, Monthly budget) and Team providers and MCP servers with Private networks."
+  },
+  "admin-trusted-apps": {
+    "files": [
+      "admin-trusted-apps"
+    ],
+    "alt": "Admin › Settings › Trusted apps: one app, Example Corp Chat, with its client ID https://chat.example.com/oauth/client-metadata.json and a label."
+  },
+  "admin-usage": {
+    "files": [
+      "admin-usage"
+    ],
+    "alt": "Admin › Usage: usage across teams grouped by Team, with requests, tokens and estimated cost per team over the last 30 days."
+  },
+  "admin-audit": {
+    "files": [
+      "admin-audit"
+    ],
+    "alt": "Admin › Audit log: recent entries across the platform with actor, how they acted, action and target, the filters and \"Export CSV\"."
+  },
+  "agent-conversations-tab": {
+    "files": [
+      "agent-conversations-tab"
+    ],
+    "alt": "An agent's Conversations tab as a platform admin: every thread with its visibility, who started it and its last activity; private titles shown as \"Title hidden\", and \"Read conversation\"."
+  },
+  "read-conversation-dialog": {
+    "files": [
+      "read-conversation-dialog"
+    ],
+    "alt": "The \"Read conversation\" dialog: a required reason field (10 to 500 characters) and a note that the read is recorded in the team's audit log for its owners to see."
+  }
+}

@@ -1,0 +1,57 @@
+---
+title: Errors and limits
+description: "Pi Durable Platform's error envelope, the status codes and error codes an app meets, rate limits and Retry-After, and how to retry safely."
+---
+
+## The envelope
+
+Errors from `/v1` routes are JSON with an HTTP status:
+
+```json
+{"error": {"code": "thread_not_found", "message": "Thread not found"}}
+```
+
+Branch on `code`, not on `message`, which is for people and may change. Every response has an `X-Request-ID` header; log it.
+
+The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_grant", "error_description": "…"}`. See [OAuth endpoints](/docs/api/oauth-endpoints).
+
+## Codes you'll meet
+
+| Status | Codes | What to do |
+|---|---|---|
+| `400` | `invalid_text`, `invalid_thread_id`, `invalid_visibility`, `invalid_title`, `invalid_name`, `invalid_external_key`, `invalid_group_by`, `invalid_range`, … | Fix the request |
+| `401` | `unauthorized` | The key or token is invalid, expired or revoked. For an OAuth token, refresh once, then reconnect ([OAuth Connect](/docs/build/oauth-connect#7-handle-a-refused-token)). |
+| `403` | `forbidden`, `person_required` | The caller's role doesn't allow it, or a service account called a route about a person |
+| `404` | `agent_not_found`, `thread_not_found`, `team_not_found`, `template_not_found`, … | Doesn't exist, **or** the caller may not see it (another team's agent, another's private thread) |
+| `409` | `visibility_fixed` | The thread's visibility was set by its first message |
+| | `agent_disabled` | The agent is turned off |
+| | `agent_model_unavailable`, `model_unavailable` | The model isn't available to the team or workspace |
+| | `name_taken` | Another agent in the team has this name |
+| | `too_many_agents`, `limit_reached` | The team (50) or the personal workspace (`maxAgents`) is full |
+| | `too_many_running` | A personal workspace is at `maxRunning`: close streams, or wait for an agent to hibernate |
+| | `team_archived` | The team is archived and read-only |
+| `412` | `revision_conflict` | Someone changed it since you read it: read it again and retry |
+| `428` | `revision_required` | Send `If-Match` with the revision |
+| `429` | `rate_limited` | Wait `Retry-After` seconds |
+| `502`, `503` | `agent_unavailable` | The agent couldn't be started, or didn't answer. Retry with backoff. |
+
+## Rate limits
+
+- **People**: `REQUESTS_PER_MINUTE` (600 by default) per person per minute, one budget shared by their browser sessions, personal API keys and every app's tokens for them.
+- **Service accounts**: the same number, per service account.
+- **OAuth endpoints**: 60 requests a minute per client address for authorize, token and revoke; 10 for registration (`429 slow_down`).
+- **Sign-in**: `LOGIN_ATTEMPTS_PER_MINUTE` (20) per client address.
+
+Opening an event stream counts as one request, however long it stays open. Over a limit, the answer is `429` with `Retry-After` in seconds. The counters are kept in PostgreSQL.
+
+## Retrying safely
+
+- **Messages**: send a `requestId` with each message and reuse it when you retry; a repeated one isn't submitted twice.
+- **Agents by key**: `PUT …/agents/by-key/{key}` is idempotent.
+- **Creating agents with `POST`** has no idempotency key. On a timeout, list the team's agents and look for the name you sent before retrying.
+- **Event streams** end on platform restarts: reconnect with a short random delay.
+- **`503`** while an agent wakes: back off and retry; waking takes seconds.
+
+## Size limits
+
+Messages: 32,000 characters. Thread IDs: 1 to 64 characters. Thread titles: 1 to 200. Agent names: 1 to 100; descriptions: 2,000. Template instructions: 20,000. Thread MCP servers: 10 per message.

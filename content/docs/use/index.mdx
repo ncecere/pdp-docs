@@ -1,0 +1,26 @@
+---
+title: Using agents
+description: What a team member does with agents in Pi Durable Platform's console, and where people normally talk to agents instead.
+---
+
+Most people never open Pi Durable Platform's console. They talk to agents in their team's own app, such as a chat app, and the app reaches the agent through the platform's API. The console is where a team's members **test** agents, look at their conversations and manage how apps reach them.
+
+As a member of a team you can:
+
+- see the team's agents in **Agents**, and every agent of every team you're on in **All agents**;
+- chat with an agent on its **Test** tab, in shared or private threads ([Testing an agent](/docs/use/test-chat), [Shared and private threads](/docs/use/shared-and-private-threads));
+- deploy and use agents of your own in your **personal workspace**, if your platform has them ([Your personal workspace](/docs/use/personal-workspace));
+- create **API keys** for your own scripts ([API keys](/docs/use/api-keys));
+- connect **apps** that act as you, and disconnect them ([Connected apps](/docs/use/connected-apps)).
+
+<Screenshot slot="all-agents" />
+
+## What you can't see
+
+Some agents in a team are **service-managed**: an app created them for its own users, one per user. Only the team's service accounts talk to them, so you don't see them as a member. Team owners and admins see that they exist (with a **Service-managed** badge) and can delete them, but can't read them. See [Deploying agents](/docs/teams/deploy-agents#service-managed-agents).
+
+Another person's **private** threads are invisible to you, as if they didn't exist.
+
+## Agents that are asleep
+
+An idle agent **hibernates**: its runtime stops, its conversations stay. The next message wakes it, which takes a few seconds. The agent's **Overview** says whether it is running now. You don't need to do anything to wake it.

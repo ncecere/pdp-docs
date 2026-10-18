@@ -1,0 +1,63 @@
+---
+title: Team MCP servers
+description: The MCP servers a Pi Durable Platform team may give its agents, servers a team adds for itself, attaching servers to templates, and how agents call them.
+---
+
+MCP servers give agents tools. A team's **MCP servers** page in Pi Durable Platform has two tabs:
+
+- **Servers**: the team's own MCP servers.
+- **Available**: every server the team may use: its own, then the platform's servers published to it.
+
+<Screenshot slot="team-mcp-servers" />
+
+## Give agents a server
+
+Servers reach agents through templates. In a template version, under **MCP servers its agents can call**, add a server and keep all its tools or choose some. Agents deployed on that version (or upgraded to it) get those tools, named `mcp__<server slug>__<tool>`. When an agent has more than 20 MCP tools, they are deferred: the agent finds them with a `tool_search` tool instead of seeing every one at once.
+
+An agent's **Overview** lists its tools.
+
+## Add a server of the team's own
+
+Owners and admins can add a server for the team, in the browser, while platform admins allow it.
+
+<Steps>
+<Step>
+
+**Servers › Add server**. Give it a name and a slug: 1 to 32 lower-case letters, digits or underscores. The slug names its tools in every agent's tool list, so it must be unique across the whole platform, not just your team, and it can't change later.
+
+</Step>
+<Step>
+
+Enter its URL: a remote MCP server's Streamable HTTP endpoint, on `https`. Add headers it needs, such as `Authorization`; their values are encrypted and never shown again.
+
+</Step>
+<Step>
+
+The platform connects and reads its tools. **Refresh tools** reads them again after the server changes.
+
+</Step>
+</Steps>
+
+A team's server is for that team only, like a team's own models: it never reaches another team, platform templates can't attach it, and a template that attaches it can't be published to the catalog.
+
+## How agents call it
+
+Agents call a team's server only through the platform's MCP proxy (`/mcp-proxy/server/<id>` on the gateway). The proxy adds the headers, refuses tools the template version left out, and records each call. Agents never see the headers.
+
+The address is guarded the same way as a team's model providers: `https`, public or inside a private network platform admins listed, never loopback, link-local or metadata addresses, checked when you save it and again on every connection. See [Team models](/docs/teams/models#proxy-only-through-the-address-guard).
+
+## What every thread shares
+
+An agent's MCP servers act with the same credentials in every thread of that agent. If a server keeps data (a notes server, a ticket system), everyone who uses the agent shares it, whatever the threads' visibility.
+
+## When adding is off
+
+Platform admins can stop teams adding servers (**Teams may add their own MCP servers** in **Admin › Settings**). Existing servers keep working and can still be changed or deleted. In a personal workspace, adding needs that switch and the personal workspace switch for MCP servers.
+
+## Change, turn off, delete
+
+Open a server: **Tools** and **Settings**. You can replace its headers, turn it off or delete it. A server still attached to a template version can't be deleted. Platform admins see every team's servers and can change, refresh, turn off or delete them. Changes are recorded in the team's audit log.
+
+## App servers for one thread
+
+Separately, an app can give an agent its user's own MCP servers for one thread, when the template version allows it. See [Thread MCP servers](/docs/build/thread-mcp-servers).

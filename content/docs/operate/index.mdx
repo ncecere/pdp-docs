@@ -1,0 +1,55 @@
+---
+title: Running Pi Durable Platform
+description: "What a Pi Durable Platform install is made of, what you need before you start, the ports, and which install paths exist in v0.1.0."
+---
+
+Pi Durable Platform is one Go binary with the web app embedded, plus an agent runtime image. You run the platform; the platform starts a runtime for each agent while it's used.
+
+## What an install is made of
+
+| Part | What | Port |
+|---|---|---|
+| **The platform** (`ghcr.io/ncecere/pi-durable-platform:v0.1.0`) | Web app, API, OAuth endpoints, background loops (hibernation, clean-up, thread events) | `8098` (`LISTEN_ADDR`): put your HTTPS ingress in front |
+| **The agent gateway** (the same process) | The model proxy, the MCP proxy, and usage and thread reports, for agents only | `8099` (`AGENTS_GATEWAY_ADDR`): never expose it outside the cluster |
+| **Agent runtimes** (`ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.0`) | One Node.js process with Pi's durable package per running agent; started by the platform | `4100`, reached by the platform only |
+| **PostgreSQL**, platform database (`DATABASE_URL`) | People, teams, templates, agents' records, keys, audit log, usage | |
+| **PostgreSQL**, agents database (`AGENTS_DATABASE_URL`) | One schema and role per agent: its conversations | |
+
+Both images are multi-arch (linux/amd64 and linux/arm64), run as non-root users with read-only root filesystems, and are signed with cosign keyless signing. Pin them by digest; the digests are on the [v0.1.0 release page](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.0).
+
+## Requirements
+
+- **Kubernetes**, for the agent runtimes. The `kubernetes` launcher needs nothing else; the `agent-sandbox` launcher needs [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) installed.
+- **PostgreSQL 17** (the version the platform is developed and tested with), with two databases. They can be on one server. See [Databases](/docs/operate/databases).
+- **An OIDC identity provider** for sign-in. See [OIDC sign-in](/docs/operate/oidc).
+- **HTTPS**: `APP_URL` must be `https` unless it's a loopback address.
+- **Models**: at least one provider your agents can use, or an OpenAI-compatible server as the default model. Without one, agents run on the scripted `demo` model.
+
+## Launchers
+
+`AGENTS_LAUNCHER` chooses how a runtime starts:
+
+| Launcher | A running agent is | Hibernating | Waking | For |
+|---|---|---|---|---|
+| `local` | a child process of the platform | stops the process | starts it | development only; refused unless `APP_URL` is loopback |
+| `kubernetes` | a pod `agent-<id>`, its secrets in a Secret of the same name | deletes the pod | creates it | production ([Install on Kubernetes](/docs/operate/kubernetes)) |
+| `agent-sandbox` | a Sandbox `agent-<id>` around the same pod | suspends it | resumes it | production with Agent Sandbox ([Agent Sandbox](/docs/operate/agent-sandbox)) |
+| `agent-sandbox` with a warm pool | a standby runtime claimed from a `SandboxWarmPool` | releases the claim | claims and activates one | faster wakes ([Agent Sandbox](/docs/operate/agent-sandbox#warm-pool)) |
+
+## Install paths in v0.1.0
+
+The repository ships the images and their Dockerfiles, but **no Kubernetes manifests, Helm chart or production Compose file**. Its `compose.yaml` only starts a development PostgreSQL. [Install on Kubernetes](/docs/operate/kubernetes) lists what to create, with example manifests to adapt. To try it on your own machine, see [Try it locally](/docs/get-started/try-it-locally).
+
+## Commands
+
+```text
+pi-durable-platform serve                 the API, the web app and background loops (the image's default)
+pi-durable-platform migrate               apply database migrations and exit
+pi-durable-platform doctor                check the configuration, PostgreSQL and migrations
+pi-durable-platform prune-agent-storage   remove agent storage no agent owns (--dry-run)
+pi-durable-platform version               print the version
+```
+
+Run **one replica** of the platform in v0.1.0; see [Install on Kubernetes](/docs/operate/kubernetes#6-the-deployment-and-service).
+
+Configuration is environment variables, optionally over a YAML file: see [Configuration](/docs/operate/configuration).

@@ -1,0 +1,6 @@
+{
+  "title": "Use agents",
+  "description": "Testing agents, threads, your personal workspace, keys and connected apps",
+  "root": true,
+  "pages": ["index", "test-chat", "shared-and-private-threads", "personal-workspace", "api-keys", "connected-apps"]
+}

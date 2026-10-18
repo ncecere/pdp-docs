@@ -1,0 +1,43 @@
+---
+title: Backups and restore
+description: "What to back up for Pi Durable Platform: both PostgreSQL databases and the two keys, how to restore, and what happens to agents' storage when the two databases disagree."
+---
+
+Pi Durable Platform keeps everything in PostgreSQL. Nothing on the platform's or the runtimes' filesystems needs a backup.
+
+## What to back up
+
+1. **The platform database** (`DATABASE_URL`): people, teams, templates, agents' records, keys, settings, usage and the audit log.
+2. **The agents database** (`AGENTS_DATABASE_URL`): every agent's conversations, one schema each. Include roles: each agent connects with its own role (`pg_dumpall --roles-only`, or your provider's equivalent).
+3. **`ENCRYPTION_KEY`** and **`API_KEY_PEPPER`**, kept in your secrets store. Without `ENCRYPTION_KEY`, stored provider keys and MCP headers can't be decrypted; without `API_KEY_PEPPER`, no API key, service account key or app token matches.
+
+Use your usual PostgreSQL backups: continuous archiving with point-in-time recovery, or regular `pg_dump`s. Back the two databases up at the same time, so they agree about which agents exist.
+
+## Restore
+
+<Steps>
+<Step>
+
+Stop the platform (scale it to zero). Agent runtimes keep running without it, since the platform is what hibernates them: delete the `agent-…` pods, Sandboxes or claims in the agents' namespace too.
+
+</Step>
+<Step>
+
+Restore both databases, and the agent roles, from the same point in time.
+
+</Step>
+<Step>
+
+Start the platform with the same `ENCRYPTION_KEY` and `API_KEY_PEPPER`. Run `pi-durable-platform doctor`.
+
+</Step>
+<Step>
+
+If the two databases came from different moments, agents' schemas may exist without an agent, or the reverse. `pi-durable-platform prune-agent-storage --dry-run` lists schemas no agent owns; remove them without `--dry-run`. An agent whose schema is gone starts empty.
+
+</Step>
+</Steps>
+
+## Thread records
+
+The platform database keeps a record of each thread (title, visibility, who started it) so listing doesn't wake agents. When an agent starts, its runtime reports every thread it has, and the platform reconciles its records with them. Threads the platform doesn't know about are treated as **shared**. So a platform database older than the agents database can turn private threads made in between into shared ones. Restore both together.

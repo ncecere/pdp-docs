@@ -1,0 +1,40 @@
+---
+title: Audit log
+description: "Pi Durable Platform's platform-wide audit log for admins and auditors: what it records, filters, entry details, export, and the actor kinds."
+---
+
+**Admin › Audit log** holds every administrative and membership change on Pi Durable Platform, and every sign-in: who, what, when and how. Each entry is written in the same database transaction as the change, and the log is append-only. Platform admins and auditors read it.
+
+<Screenshot slot="admin-audit" />
+
+## What's recorded
+
+| Area | Actions (examples) |
+|---|---|
+| Sign-in | `auth.login`, `auth.logout`, `auth.login_denied` (a suspended person) |
+| People | `platform.user_role_change`, `platform.user_suspend`, `platform.user_reactivate`, `platform.bootstrap_role` |
+| Teams | `team.create`, `team.update`, `team.archive`, `team.owner_assign`, `team.member_*`, `team.invite_*`, `team.personal_create`, `team.personal_limits` |
+| Keys and service accounts | `api_key.*`, `service_account.*`, `service_account_key.*`, and `*.pepper_rehash` after a pepper rotation |
+| Templates and agents | `agent_template.*` (create, version, publish request, approve, reject, unpublish), `agent.create`, `agent.update`, `agent.delete` |
+| Models and MCP servers | `model_provider.*`, `model.*`, `mcp_server.*`, `platform.model_settings` |
+| Settings | `platform.personal_settings`, `oauth.trusted_clients_update` |
+| OAuth Connect | `oauth.consent`, `oauth.token_issue`, `oauth.revoke` (reason `user`, `admin`, `client` or `refresh_reuse`), `oauth.client_register` |
+| Conversations | `thread.admin_read`: a platform admin read a conversation, with the reason |
+
+Conversations themselves are never in the log.
+
+## Who acted, and how
+
+Each entry has an actor: a **person**, a **service account**, or the **system**. For a person it says **how**: signed in to the web app, with an API key (named), or through an app they connected (named). An app's actions are the person's, "via" the app.
+
+## Filters and details
+
+Filter by **Action** (an area, or type an exact action), **Person**, **Target type**, date range, and **Hide sign-ins**. Open an entry for its target, the fields before and after, the metadata (for a conversation read, the **Reason**), the **Request ID** and the client's address. **Export CSV** downloads the filtered log.
+
+The request ID is also in the `X-Request-ID` response header and the platform's logs, so you can follow one request across both.
+
+Team entries also appear in the team's own log, without the client address; see [Team audit log](/docs/teams/audit-log).
+
+## Retention
+
+The platform doesn't delete audit entries. Keep its database in your backups; see [Backups](/docs/operate/backups).

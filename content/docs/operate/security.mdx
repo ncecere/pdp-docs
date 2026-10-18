@@ -1,0 +1,55 @@
+---
+title: Security model
+description: "How Pi Durable Platform isolates agents and teams, what it trusts, how secrets and keys are stored and rotated, and its known limits in v0.1.0."
+---
+
+## One enforcement point
+
+Apps and browsers reach agents **only through the platform**. It authenticates every request, checks the caller's role in the agent's team and the thread's visibility, then relays the conversation. Runtimes are never exposed: each accepts only its own per-agent bearer token, which only the platform holds. Not allowed reads as not found, so the API doesn't reveal that another team's agent, or another person's private thread, exists.
+
+## Isolation between agents
+
+- **Storage**: one schema and one database role per agent, in a database apart from the platform's. A role owns only its schema and has no rights elsewhere. See [Databases](/docs/operate/databases).
+- **Runtime**: one process (one pod) per running agent, non-root, read-only root filesystem, no capabilities, no Kubernetes service account token. `AGENTS_RUNTIME_CLASS` can add a sandboxing runtime such as gVisor.
+- **Single owner**: a runtime owns its agent through an advisory lock on its only database connection. A stale runtime that loses its connection loses its ability to write at the same moment its lock is released, so two runtimes never write one agent.
+- **Network**: in proxy mode agents need no path but the platform's gateway and their database. See [Network isolation](/docs/operate/network-isolation).
+
+## What it trusts
+
+Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own in v0.1.0; that needs stronger isolation first (see Known limits).
+
+## Teams and people
+
+- Team and platform roles are checked in the same database transaction as each change, and each change is audited in that transaction.
+- Platform roles never reach conversations. A platform admin's read of one needs a reason and is recorded in the team's log.
+- Personal API keys act as their person. Apps connected with OAuth Connect act as their person **without** the platform role. Service accounts act in their own team only.
+- Administration, members, keys and service accounts need a browser session: a stolen key can't create more keys or change roles.
+
+## Browser sessions
+
+Sessions are cookies (`Secure` on https), lasting `SESSION_TTL`. Writes from the browser need the session's CSRF token and a same-origin `Origin`. Suspending a person ends their sessions.
+
+## Secrets and keys
+
+- **Provider keys, MCP headers and apps' thread MCP headers** are encrypted with `ENCRYPTION_KEY` and never returned by the API. Agents get provider keys only for direct-mode providers and the platform's default model; in proxy mode the gateway adds them.
+- **API keys, service account keys and OAuth tokens** are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`. They are shown once, never logged.
+- **Runtime tokens and database passwords** reach Kubernetes runtimes through a per-agent Secret, never the pod spec; with a warm pool, through the activation request, stored nowhere in Kubernetes.
+
+### Rotating keys
+
+- **`API_KEY_PEPPER`**: set the new value, and the old one as `API_KEY_PEPPER_PREVIOUS`. Keys made with the old pepper keep working and are re-digested on their next use (`*.pepper_rehash` in the audit log). `doctor` counts keys still on the old pepper. After 2 to 4 weeks, remove `API_KEY_PEPPER_PREVIOUS`; keys not used by then stop working.
+- **`ENCRYPTION_KEY`**: set the new value, and the old one as `ENCRYPTION_KEY_PREVIOUS`; values sealed with the old key still decrypt. Keep the old key until the stored secrets (provider keys, MCP headers) have been entered again.
+- **The warm pool's activation token**: see [Agent Sandbox](/docs/operate/agent-sandbox#rotating-the-activation-token).
+
+## Addresses others choose
+
+Teams' own providers and MCP servers, apps' metadata documents and apps' MCP servers are addresses chosen by teams or apps. The platform guards them (public addresses, admin-listed private networks, allowed hosts, no redirects, DNS pinned per connection). See [Network isolation](/docs/operate/network-isolation#what-the-platform-guards-itself).
+
+## Known limits
+
+- **Advisory locks are database-wide**: any role in the agents database could take another agent's lock key and stop it from starting. Acceptable for reviewed templates; uploaded agents would need a storage proxy instead of database credentials.
+- **No hostile-code isolation yet**: running teams' own code needs sandboxed runtimes (gVisor or Kata) first.
+- **Shared agent tools**: every thread of an agent uses the same MCP credentials. Private threads hide conversations, not what an MCP server stores.
+- **Thread IDs are chosen by clients**: anyone who may use an agent can set the MCP servers of a thread that doesn't exist yet, which a later private thread with that ID would inherit. Use random thread IDs.
+- **Sign-in rules apply at sign-in**: removing someone from an allowed group doesn't end their sessions, keys or connected apps. Suspend them instead.
+- **Database roles are server-wide**: agent roles outlive a dropped agents database.

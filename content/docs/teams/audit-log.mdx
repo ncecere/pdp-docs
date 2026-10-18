@@ -1,0 +1,36 @@
+---
+title: Team audit log
+description: What a Pi Durable Platform team's audit log records, who can read it, how to filter it, and the entries platform admins leave in it.
+---
+
+Every change to a Pi Durable Platform team is recorded in its audit log, in the same database transaction as the change itself. The log is append-only: entries are never changed or deleted.
+
+Open **Team settings › Audit log**. Owners, admins and editors can read it; members can't. The team's **Overview** shows the most recent changes.
+
+<Screenshot slot="team-audit" />
+
+## What's recorded
+
+- **Members**: added, invited, role changed, removed, left; invites revoked and accepted; owners assigned.
+- **Agents**: deployed, changed (name, model, version, turned off), deleted.
+- **Templates**: created, new versions, requests to publish, approved, rejected, taken out of the catalog.
+- **Service accounts and keys**: created, changed, deleted, keys created and revoked.
+- **The team's own model providers, models and MCP servers**: added, changed, deleted, including changes platform admins make.
+- **Platform admins reading a conversation**: each read, with the reason they gave (`thread.admin_read`).
+
+Conversations themselves aren't in the log.
+
+## Reading an entry
+
+Each entry says **who** acted and **how**: a person in the browser, a person with an API key (and its name), a person through a connected app (and the app's name), a service account (and the key's name), or the system. It names the target (with its current name, or its last known name if it was deleted), and **View details** shows the fields before and after the change, and the request ID.
+
+## Filters
+
+- **Action**: an area (all agent changes, all member changes) or one exact action.
+- **Person**: one person's entries, including their API keys and connected apps.
+- **Target** and date range.
+- **Hide sign-ins**.
+
+## A platform admin read a conversation
+
+An entry **Read a private conversation** means a platform admin opened one of the team's conversations, or one in your personal workspace. It names the admin, the thread, whether it was private, and the **Reason** they gave. Platform admins can't read a conversation without leaving this entry. See [Reading conversations](/docs/administer/reading-conversations).

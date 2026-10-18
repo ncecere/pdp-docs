@@ -1,0 +1,115 @@
+---
+title: Configuration
+description: "Every Pi Durable Platform setting: its environment variable, default and meaning, the YAML file, secrets from files, and the production safety checks."
+---
+
+Pi Durable Platform reads its configuration at start-up: built-in defaults, then an optional YAML file named by `PDP_CONFIG_FILE`, then environment variables (later sources win). Settings marked **secret** can also be read from a file named by `<NAME>_FILE`, which is how Kubernetes Secrets are usually mounted; surrounding whitespace is trimmed.
+
+The YAML file is flat: its keys are the variable names in lower case. Lists can be YAML lists or comma-separated strings. Unknown keys are refused.
+
+```yaml
+app_url: https://agents.example.com
+agents_launcher: kubernetes
+oidc_allowed_groups: [agents-users, agents-admins]
+oidc_client_secret_file: /run/secrets/oidc-client-secret
+```
+
+`pi-durable-platform doctor` checks the configuration without starting anything; see [Doctor and health](/docs/operate/doctor-and-health).
+
+## Server
+
+| Variable | Default | |
+|---|---|---|
+| `APP_URL` | none, required | The public origin, such as `https://agents.example.com`. Used for cookies, OIDC redirects, origin checks and as the OAuth issuer. `https` unless loopback. |
+| `LISTEN_ADDR` | `:8098` | Where the web app and API listen |
+| `DATABASE_URL` | none, required (secret) | The platform database |
+| `MIGRATE_ON_START` | `false` | Apply migrations at start-up |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
+| `LOG_FORMAT` | `json` | `json` or `text` |
+| `TRUSTED_PROXIES` | none | Comma-separated CIDRs of your ingress, allowed to set `X-Forwarded-For` |
+| `SHUTDOWN_DELAY` | `5s` | After SIGTERM, how long readiness fails before the server stops taking requests (0 to 5m) |
+| `SHUTDOWN_TIMEOUT` | `60s` | How long in-flight requests get to finish (1s to 30m) |
+
+## Instance identity
+
+| Variable | Default | |
+|---|---|---|
+| `INSTANCE_NAME` | `Pi Durable Platform` | The product name in the web app and page titles (1 to 100 characters) |
+| `ORG_NAME` | none | Your organisation's name, such as "Example Corp" |
+| `UI_THEME` | `neutral` | The only theme |
+| `UI_LOGO_URL` | none | An `https` URL or a same-origin path such as `/logo.svg` |
+| `SUPPORT_URL` | none | The **Help** link: an http(s) URL or a `mailto:` address |
+| `TEAM_REQUEST_URL` | none | Where people request a team, such as a service desk form; Home links to it |
+
+## Sign-in and sessions
+
+| Variable | Default | |
+|---|---|---|
+| `OIDC_ISSUER` | none | Your identity provider's issuer URL. Empty disables single sign-on. |
+| `OIDC_CLIENT_ID` | none | Required with `OIDC_ISSUER` |
+| `OIDC_CLIENT_SECRET` | none (secret) | Required with `OIDC_ISSUER` |
+| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid` |
+| `OIDC_EMAIL_CLAIM` | `email` | The claim holding the email address |
+| `OIDC_GROUPS_CLAIM` | `groups` | The claim holding the person's groups; empty stores none |
+| `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Refuse sign-in unless `email_verified` is true |
+| `OIDC_ALLOWED_EMAIL_DOMAINS` | none (anyone) | Comma-separated email domains allowed to sign in |
+| `OIDC_ALLOWED_GROUPS` | none (anyone) | Only people in one of these groups may sign in; needs `OIDC_GROUPS_CLAIM` |
+| `BOOTSTRAP_ADMIN_SUBJECT` | none | The OIDC subject made platform admin on its first sign-in, once |
+| `DEV_AUTH` | `false` | Development personas; refused unless `APP_URL` is loopback |
+| `SESSION_TTL` | `12h` | How long a browser session lasts (5m to 30 days) |
+| `REQUESTS_PER_MINUTE` | `600` | Requests per person (or service account) per minute |
+| `LOGIN_ATTEMPTS_PER_MINUTE` | `20` | Sign-in attempts per client address per minute |
+
+See [OIDC sign-in](/docs/operate/oidc).
+
+## Keys
+
+| Variable | Default | |
+|---|---|---|
+| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys, MCP headers, apps' MCP headers. |
+| `ENCRYPTION_KEY_PREVIOUS` | none (secret) | The key being rotated away from; still accepted for reads |
+| `API_KEY_PEPPER` | none, required (secret) | 32 bytes, base64. The HMAC key under which API keys, service account keys and OAuth tokens are stored as digests. |
+| `API_KEY_PEPPER_PREVIOUS` | none (secret) | The pepper being rotated away from. Keys made with it keep working and are re-digested on use. Remove it after 2 to 4 weeks. |
+
+See [Security model](/docs/operate/security#rotating-keys).
+
+## Agents
+
+| Variable | Default | |
+|---|---|---|
+| `AGENTS_DATABASE_URL` | none, required (secret) | The agents database, with a role that has `CREATEROLE` and `CREATE` on it. Separate from `DATABASE_URL`'s database. |
+| `AGENTS_CREATE_DATABASE` | `false` | Create the agents database at start-up; development only |
+| `AGENTS_RUNTIME_DATABASE_HOST` | none | `host:port` agent runtimes use for PostgreSQL, when they reach it differently from the platform |
+| `AGENTS_LAUNCHER` | `local` | `local` (development only), `kubernetes` or `agent-sandbox` |
+| `AGENTS_RUNTIME_DIR` | `runtime` | The runtime package, for the `local` launcher |
+| `AGENTS_NAMESPACE` | the platform's namespace | Where agent pods, Sandboxes and claims go |
+| `AGENTS_IMAGE` | none | The runtime image. Required for `kubernetes`, and for `agent-sandbox` without a warm pool. |
+| `AGENTS_RUNTIME_CLASS` | none | A RuntimeClass for agent pods, such as gVisor |
+| `AGENTS_IMAGE_PULL_SECRET` | none | A registry Secret in the agents' namespace |
+| `AGENTS_SANDBOX_WARM_POOL` | none | A `SandboxWarmPool` to claim runtimes from (`agent-sandbox`) |
+| `AGENTS_SANDBOX_ACTIVATION_SECRET` | none | The Secret holding the pool's `RUNTIME_ACTIVATION_TOKEN`; created if missing |
+| `AGENTS_SANDBOX_ACTIVATION_TOKEN` | none (secret) | The pool's token given directly (at least 32 characters); not with the Secret |
+| `AGENTS_IDLE_TIMEOUT` | `10m` | Idle agents hibernate after this long (10s to 7 days) |
+| `AGENTS_GATEWAY_ADDR` | `127.0.0.1:8099` | Where the platform listens for agents (model and MCP proxy). Use `:8099` on Kubernetes. |
+| `AGENTS_GATEWAY_URL` | `http://127.0.0.1:8099` | How agents reach that listener: an http(s) origin |
+| `AGENTS_CLIENT_MCP_HOSTS` | none | Hosts apps may give agents MCP servers on, comma-separated `[scheme://]host[:port]`, `*.` for subdomains, `https` by default. Empty: none. |
+| `AGENTS_CLIENT_MCP_MODE` | `proxy` | `proxy` (through the gateway) or `direct` for apps' MCP servers |
+| `AGENTS_MODEL_PROVIDER` | `demo` | The platform's default model: `demo` (scripted, no key) or `openai-compatible` |
+| `AGENTS_MODEL_BASE_URL` | none | With `openai-compatible`, such as `https://models.example.com/v1` |
+| `AGENTS_MODEL_API_KEY` | none (secret) | With `openai-compatible` |
+| `AGENTS_MODEL_ID` | none | With `openai-compatible` |
+| `AGENTS_MODEL_REASONING` | `false` | Whether the default model reasons |
+
+The default model is for templates and agents that don't choose one from the model catalog. Its key is given to the agents that use it.
+
+## Production safety checks
+
+Unless `APP_URL` is a loopback address, the platform refuses to start (and `doctor` fails) when:
+
+- `ENCRYPTION_KEY`, `API_KEY_PEPPER` or `API_KEY_PEPPER_PREVIOUS` is the public example value from `.env.example`;
+- `DEV_AUTH` is on;
+- `AGENTS_LAUNCHER` is `local`, which runs agents as unisolated processes on the platform's host;
+- `AGENTS_CREATE_DATABASE` is on;
+- `APP_URL` is `http`.
+
+`pi-durable-platform migrate` needs only `DATABASE_URL`.

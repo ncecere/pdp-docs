@@ -1,0 +1,49 @@
+---
+title: Members and roles
+description: Adding and inviting members of a Pi Durable Platform team, the four team roles and what each can do, owners, and leaving a team.
+---
+
+A Pi Durable Platform team has people with one of four roles: **owner**, **admin**, **editor** or **member**. Open **Team settings › Members**.
+
+<Screenshot slot="team-members" />
+
+## Add someone
+
+Owners and admins choose **Add member**, enter the email address the person signs in with and pick a role.
+
+- If they have signed in before, they're on the team at once.
+- If they haven't, they get an **invite**. They join the team when they first sign in. Open invites are listed under **Open invites** and expire after 30 days; **Revoke invite** cancels one.
+
+The platform doesn't send email: tell them yourself.
+
+## Roles
+
+| Can | Member | Editor | Admin | Owner |
+|---|:-:|:-:|:-:|:-:|
+| Use the team's agents (test chat, threads) | ✓ | ✓ | ✓ | ✓ |
+| See members, service accounts, models, MCP servers, usage and limits | ✓ | ✓ | ✓ | ✓ |
+| Deploy agents, change and upgrade them | | ✓ | ✓ | ✓ |
+| Create team templates and new versions | | ✓ | ✓ | ✓ |
+| Read the team's audit log | | ✓ | ✓ | ✓ |
+| Delete agents | | | ✓ | ✓ |
+| Ask to publish a template to the catalog, or take it out | | | ✓ | ✓ |
+| Add, change and remove members and invites (not owners) | | | ✓ | ✓ |
+| Manage service accounts and their keys | | | ✓ | ✓ |
+| Add the team's own model providers and MCP servers | | | ✓ | ✓ |
+| Add and remove owners | | | | ✓ |
+
+Nobody on a team can rename, archive or delete it: platform admins do. A team always keeps at least one owner.
+
+Service accounts have a role too, **member** or **editor**: see [Service accounts](/docs/teams/service-accounts).
+
+## Change a role or remove someone
+
+Open the person's row in **Members**. Admins can change and remove anyone but owners; owners can change anyone, including making someone an owner (**Make owner**). **Remove from team…** takes away their access at once, including for apps they connected and their personal API keys.
+
+## Leave a team
+
+**Team settings › General › Leave team**. If you're the only owner, make someone else an owner first.
+
+## Platform staff on your team's pages
+
+Platform admins and auditors who aren't members can open your team's pages, except **Agents**, with a notice that they're viewing it as platform staff. They can't open your agents or read conversations in the console; see [Reading conversations](/docs/administer/reading-conversations) for the one, recorded exception.

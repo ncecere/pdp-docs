@@ -1,0 +1,84 @@
+---
+title: Try it locally
+description: Run Pi Durable Platform from source on your own machine, with development sign-in, local agent runtimes and a scripted demo model.
+---
+
+Pi Durable Platform runs on a developer's machine from a checkout of its repository. Agents run as local processes (the `local` launcher), sign-in uses fixed development personas, and agents answer with a scripted demo model until you configure a real one. None of this is for a reachable host: the platform refuses to start with these settings unless `APP_URL` is a loopback address.
+
+## What you need
+
+- Go 1.26 or later
+- Node.js 22.19 or later and pnpm 11 (for the agent runtime)
+- npm (for the web app)
+- Docker, for the development PostgreSQL 17
+
+## Run it
+
+<Steps>
+<Step>
+
+Clone the repository at the release and start PostgreSQL. `make deps-up` starts PostgreSQL 17 on `127.0.0.1:55432` with Docker Compose; it keeps running until `make deps-down`.
+
+```sh
+git clone --branch v0.1.0 https://github.com/ncecere/pi-durable-platform.git
+cd pi-durable-platform
+make deps-up
+```
+
+</Step>
+<Step>
+
+Install the agent runtime's packages and build the web app (the Go binary embeds it).
+
+```sh
+(cd runtime && pnpm install)
+make web
+```
+
+</Step>
+<Step>
+
+Start the platform. `make run` creates `.env` from `.env.example` the first time, applies the migrations, creates the agents database (`pdp_agents`) and serves `http://localhost:8098`.
+
+```sh
+make run
+```
+
+</Step>
+<Step>
+
+Open `http://localhost:8098` and choose a persona. **Dev Platform Admin** is a platform admin and **Dev Platform Auditor** a platform auditor; **Dev User**, **Alex Dev**, **Blair Dev** and **Casey Dev** have no platform role.
+
+</Step>
+<Step>
+
+As **Dev Platform Admin**, create a team in **Admin › Teams** with yourself or Alex Dev as its owner. Then open the team's **Agents**, choose **Deploy agent**, and use its **Test** tab.
+
+</Step>
+</Steps>
+
+## Use a real model
+
+The `.env` starts with `AGENTS_MODEL_PROVIDER=demo`, a scripted model that needs no key. To use a real one, either add a provider and models in **Admin › Models** (see [Models](/docs/administer/models)), or make an OpenAI-compatible server the platform's default model in `.env`:
+
+```sh
+AGENTS_MODEL_PROVIDER=openai-compatible
+AGENTS_MODEL_BASE_URL=https://models.example.com/v1
+AGENTS_MODEL_API_KEY=...
+AGENTS_MODEL_ID=...
+```
+
+## Other commands
+
+| Command | Does |
+|---|---|
+| `make doctor` | Checks the configuration, PostgreSQL and migrations (see [doctor](/docs/operate/doctor-and-health)) |
+| `make migrate` | Applies migrations and exits |
+| `make build` | Builds `bin/pi-durable-platform` (run `make web` first to include the web app) |
+| `make web-dev` | The web app with hot reload on port 5176, using the API on 8098 |
+| `make test` | The Go tests (integration tests skip without PostgreSQL) |
+| `make deps-down` | Stops PostgreSQL and keeps its data |
+
+<Callout type="warn" title="Development settings only">
+`DEV_AUTH=true`, the example `ENCRYPTION_KEY` and `API_KEY_PEPPER` in `.env.example`, `AGENTS_LAUNCHER=local`, `AGENTS_CREATE_DATABASE=true` and an `http://` `APP_URL` are all refused unless `APP_URL` is a loopback address. Never expose a development instance. To install it for real, see [Operate](/docs/operate).
+</Callout>

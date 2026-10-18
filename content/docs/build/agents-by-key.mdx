@@ -1,0 +1,66 @@
+---
+title: Agents for your app's users
+description: "Giving each user of your app their own Pi Durable Platform agent: service-managed agents by external key with a service account, or agents in each person's personal workspace with OAuth Connect."
+---
+
+An app often wants **one agent per user**: each person gets their own assistant, with conversations nobody else shares. Pi Durable Platform supports two ways to do it. Agents that hold nothing in common are separate agents; threads of one agent share its tools (see [Private threads](/docs/build/private-threads#what-private-threads-dont-hide)).
+
+## With a service account: agents by key
+
+Your team creates an **editor** service account and gives your app its key. The app asks for an agent by an **external key** of its choosing, for example its own user ID:
+
+```sh
+curl -X PUT https://agents.example.com/v1/teams/support/agents/by-key/u-42 \
+  -H "Authorization: Bearer $PDP_SA_KEY" -H "Content-Type: application/json" \
+  -d '{"name": "Assistant for user 42", "templateId": "…"}'
+```
+
+- The first call creates the agent (`201`); later calls return the same agent (`200`) and ignore the body. It's idempotent: call it whenever you need the agent's ID.
+- The external key is 1 to 200 letters, digits or `. _ : @ -`, unique in the team.
+- The body is optional: `name` (default: the external key), `description`, `templateId` (a catalog template or one of the team's own, private ones too) or `template` (a platform template's slug; default `assistant`), and `modelId` (a model published to the team).
+- It needs an **editor** service account; people's keys and app tokens get `403`.
+
+These agents are **service-managed**:
+
+- Only the team's service accounts use them: list them with `GET /v1/agents` or `GET /v1/teams/{team}/agents` with the service account's key.
+- The team's members don't see them. Owners and admins see that they exist (name, external key, status, last use), never their conversations, and can delete them.
+- They don't count towards the team's limit of 50 agents. There is no platform limit on how many you create; your cluster's capacity bounds how many run at once, and idle ones hibernate.
+- Your editor service account can change and delete them (`PATCH` and `DELETE /v1/agents/{agentId}`), but not the team's ordinary agents.
+
+The conversations belong to your app, not to the people: the platform knows only the service account as the author. Your app decides which user sees which agent.
+
+## With OAuth Connect: agents in personal workspaces
+
+If people connect your app with [OAuth Connect](/docs/build/oauth-connect), create their agent in their **personal workspace** with their token. The agent and its conversations are theirs, and they see it in the console.
+
+```sh
+# Find the personal workspace
+curl https://agents.example.com/v1/teams -H "Authorization: Bearer $TOKEN"   # the team with "kind": "personal"
+
+# Templates and models it may use
+curl https://agents.example.com/v1/agent-templates -H "Authorization: Bearer $TOKEN"
+curl https://agents.example.com/v1/teams/$PERSONAL/models -H "Authorization: Bearer $TOKEN"
+
+# Create the agent
+curl -X POST https://agents.example.com/v1/teams/$PERSONAL/agents \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "Assistant", "templateId": "…", "modelId": "…"}'
+```
+
+- The template must be in the **catalog** (personal workspaces have no templates of their own), and its model, or the `modelId` you pass, must be offered to personal workspaces; otherwise `409 model_unavailable`.
+- The workspace's limits apply: `maxAgents` on create (`409 limit_reached`) and `maxRunning` on waking (`409 too_many_running`). Read them from `GET /v1/teams/{team}/limits` rather than assuming the defaults (5 and 2).
+- Names are unique per workspace, ignoring case (`409 name_taken`). Creation has no idempotency key: choose the name before you call, and on a timeout or `name_taken` list the workspace's agents and adopt the one with that name.
+- Keep the agent's ID per person. If it later answers `404`, the person deleted it: create it again.
+- Agents stay on the template version they were made with. To roll out a new version, `PATCH /v1/agents/{agentId}` with `templateVersion`, using the person's token.
+
+## Choosing
+
+| | Service account by key | OAuth Connect in personal workspaces |
+|---|---|---|
+| Who owns the agent | Your team (service-managed) | The person |
+| People must connect | No | Yes, once |
+| Visible in the console | To your team's owners and admins, without conversations | To the person |
+| Limits | Your cluster | The workspace's `maxAgents` and `maxRunning` |
+| Templates | Your team's and the catalog | The catalog |
+
+There is no way to move an agent, or its threads, between teams or workspaces.

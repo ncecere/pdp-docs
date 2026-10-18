@@ -1,0 +1,36 @@
+---
+title: Your personal workspace
+description: The one-person team Pi Durable Platform gives each person who signs in, what it can deploy, its limits, and who else can see it.
+---
+
+While platform admins have them turned on, Pi Durable Platform gives everyone who signs in a **personal workspace**: a team of your own, with you as its only member. Choose **Personal** in the team switcher to open it.
+
+<Screenshot slot="personal-workspace" />
+
+## What it holds
+
+- **Agents** you deploy from the **catalog**. A personal workspace has no templates of its own.
+- **Models** and **MCP servers** that platform admins offer to personal workspaces. If your administrators allow it, you can also add model providers and MCP servers of your own, for this workspace only (see [Team models](/docs/teams/models) and [Team MCP servers](/docs/teams/mcp-servers); they work the same way).
+- **Usage** and **Settings**, with the workspace's audit log.
+
+It has no other members, invites or service accounts.
+
+An app you connect with [OAuth Connect](/docs/use/connected-apps) usually creates your agents here. They are yours: you can rename, change or delete them in the console like any other.
+
+## Limits
+
+The **Overview** shows the workspace's limits and how much of them you use:
+
+- **Max agents**: how many agents it may have (5 by default). Agents that apps created for you count too.
+- **Max running at once**: how many may be awake at the same time (2 by default). Waking another is refused until one hibernates.
+- **Monthly budget**: recorded, not enforced yet.
+
+Platform admins set the defaults for everyone and can change them for one workspace. When you reach a limit, delete an agent, or wait for one to hibernate (10 idle minutes by default), or ask your administrators.
+
+## Who can see it
+
+Only you use its agents and read its conversations. Platform admins and auditors can **audit** it: they see its agents' settings and status, its usage and its audit log, never conversation titles or content. A platform admin can open one conversation only by giving a reason, and that read is recorded in your workspace's audit log, where you see it. See [Reading conversations](/docs/administer/reading-conversations).
+
+## If personal workspaces are turned off
+
+No new personal workspaces are created. Existing ones stay; platform admins can archive one to make it read-only.

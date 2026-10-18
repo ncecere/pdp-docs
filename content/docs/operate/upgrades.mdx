@@ -1,0 +1,61 @@
+---
+title: Upgrades and migrations
+description: "How Pi Durable Platform's database migrations work, upgrading the platform and the agent runtime image together, and what happens to running agents."
+---
+
+## Migrations
+
+The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0 has 16.
+
+Apply them either way:
+
+- **At start-up**, with `MIGRATE_ON_START=true`.
+- **As a step of your rollout**, with `pi-durable-platform migrate`, which applies them and exits. It needs only `DATABASE_URL`.
+
+A platform whose database is behind the binary refuses to start, naming both migration numbers. `pi-durable-platform doctor` reports the migration state.
+
+The **agents database** has no migrations of its own: agent schemas are created by the platform, and their tables by Pi's durable package in each runtime.
+
+## Upgrading
+
+<Steps>
+<Step>
+
+Read the release notes for the version you're moving to, and back up both databases (see [Backups](/docs/operate/backups)).
+
+</Step>
+<Step>
+
+Verify the new images' signatures and note their digests.
+
+</Step>
+<Step>
+
+Run the new version's `migrate`, or let `MIGRATE_ON_START` do it.
+
+</Step>
+<Step>
+
+Roll out the platform with the new image, and set `AGENTS_IMAGE` (and your warm pool's image, if you use one) to the **same release** of the runtime image.
+
+</Step>
+<Step>
+
+Run `doctor`, then deploy and test an agent.
+
+</Step>
+</Steps>
+
+## Running agents during an upgrade
+
+Runtimes that are running keep their image until they hibernate. Their next wake starts the new runtime image. To move every agent at once, hibernate them: delete their `agent-…` pods (or Sandbox claims), and the next request starts each one fresh. Their conversations are in PostgreSQL and carry over.
+
+Open event streams end when a platform pod stops; clients reconnect to the new one.
+
+## Rolling back
+
+Migrations don't go backwards. To return to an older version after a migration ran, restore the databases from the backup you took before the upgrade.
+
+## Pi's durable package
+
+The runtime pins Pi's durable package (1.3.0 in v0.1.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.

@@ -1,0 +1,38 @@
+---
+title: Usage
+description: "A Pi Durable Platform team's model usage: requests, tokens and estimated cost per day, model or agent, where the numbers come from, and exporting them."
+---
+
+The team's **Usage** page in Pi Durable Platform shows how much the team's agents used their models: requests, input and output tokens, cache reads and writes, and an **Estimated cost**. Every member can see it, and so can the team's service accounts through the API.
+
+<Screenshot slot="team-usage" />
+
+- **Period**: the date range (days in UTC), up to 366 days; the last 30 days by default.
+- **Group by**: **Day**, **Model** or **Agent**.
+- A chart of tokens per day, and a table with the totals.
+
+An agent's **Overview** shows its own usage over the last 30 days.
+
+## Where the numbers come from
+
+- **Proxied models**: the platform's model gateway relays every request and records the tokens the provider reports.
+- **Direct-mode models and the platform's default model**: the gateway doesn't see these requests, so each agent counts its finished responses and reports them to the platform. Reports for proxied models are ignored, so nothing counts twice.
+
+Usage counts model requests only. Running agents, storage and MCP calls aren't in it.
+
+## Estimated cost
+
+The cost uses each model's **current** prices (US dollars per million input and output tokens), which platform admins set. If a price changes, the whole period is recalculated with the new one. Requests to models without prices are counted but not in the cost; the report says how many.
+
+## Service-managed agents
+
+Agents that apps created for their users are named in the report for the team's owners and admins and its service accounts. Other members see them summed in one row.
+
+## Through the API
+
+```sh
+curl "https://agents.example.com/v1/teams/support/usage?groupBy=agent&from=2026-10-01&to=2026-10-31" \
+  -H "Authorization: Bearer $PDP_SA_KEY"
+```
+
+`groupBy` is `day`, `model` or `agent`, one at a time. Add `agentId` to see one agent, for example by day. See [getTeamUsage](/docs/api/reference/models/getTeamUsage).

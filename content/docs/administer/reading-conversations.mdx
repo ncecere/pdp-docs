@@ -1,0 +1,68 @@
+---
+title: Reading conversations with a reason
+description: How a Pi Durable Platform platform admin reads a private conversation or a personal workspace's conversation, what is recorded, and who sees the record.
+---
+
+Platform roles in Pi Durable Platform never reach conversations by themselves. Sometimes a platform admin has to read one anyway, for example to investigate a report of abuse. The platform allows it only **with a stated reason**, and records each read where the conversation's owners see it.
+
+## Who can
+
+- **Platform admins**, signed in to the browser. Not with an API key or a connected app.
+- **Platform auditors** can't read conversations, and can't list an agent's threads either: the list is for platform admins only. In v0.1.0 auditors still see the **Conversations** tab, but it doesn't load for them.
+
+## The Conversations tab
+
+Platform admins see a **Conversations** tab on an agent's page: every thread of the agent, private ones too, with its visibility, who started it, who has taken part and its last activity.
+
+- Titles of **private** conversations, and of **every** conversation of a personal workspace's agent or of a service-managed agent (an app's agent for one of its users), are hidden: titles are content.
+- The tab shows **Only platform admins can see this agent's conversations.** and, to admins, that reading one takes a reason recorded in the team's audit log.
+
+<Screenshot slot="agent-conversations-tab" />
+
+In the console, the tab is on the agent pages platform staff can open: the agents of personal workspaces (**Admin › Teams** › the workspace › **Agents**) and the agents of teams they are members of. For other agents, use the API (below).
+
+## Read one
+
+<Steps>
+<Step>
+
+Choose the conversation, then **Read conversation**.
+
+</Step>
+<Step>
+
+Give a **reason** of 10 to 500 characters. Be specific: the owners will read it.
+
+</Step>
+<Step>
+
+The platform records the read, then shows the conversation once. Reading wakes the agent, like any read. An agent that is turned off can't be read until it's turned on again.
+
+</Step>
+</Steps>
+
+<Screenshot slot="read-conversation-dialog" />
+
+## What is recorded
+
+Before the conversation is returned, the platform writes `thread.admin_read` to the **audit log of the agent's team**, shown as **Read a private conversation**, with:
+
+- who read it,
+- the agent and thread (`<agentId>/<threadId>`),
+- the **reason**,
+- whether the thread was private, and whether the workspace is personal.
+
+The team's owners, admins and editors see it in **Team settings › Audit log**; for a personal workspace, its owner does. It's also in the platform's audit log. Each read is a new entry: reading the same conversation again takes a new reason.
+
+## Through the API
+
+```sh
+# Every thread of an agent, private ones too (platform admins)
+GET /v1/admin/agents/{agentId}/threads
+
+# One conversation, with a reason (platform admins, browser session)
+POST /v1/admin/agents/{agentId}/threads/{threadId}/read
+{"reason": "Investigating a report of abuse from the helpdesk team"}
+```
+
+See [adminListAgentThreads](/docs/api/reference/admin/adminListAgentThreads) and [adminReadAgentThread](/docs/api/reference/admin/adminReadAgentThread).
