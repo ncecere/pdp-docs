@@ -15,12 +15,13 @@ Every action has a label in the log (since v0.1.1, agents, templates, model prov
 |---|---|
 | Sign-in | `auth.login` (Signed in), `auth.logout`, `auth.login_denied` (Sign-in denied: a suspended person) |
 | People | `platform.user_role_change`, `platform.user_suspend`, `platform.user_reactivate`, `platform.bootstrap_role` |
+| User access (identity provider groups) | `user.group_denied` (Ended access: no longer in an allowed group; by the system, with the reason and how many connected apps were disconnected), `user.group_restored` (Restored access: back in an allowed group; by the person signing in, or by the system when `OIDC_ALLOWED_GROUPS` was removed) |
 | Teams | `team.create`, `team.update`, `team.archive`, `team.owner_assign`, `team.member_*`, `team.invite_*`, `team.personal_create`, `team.personal_limits` |
 | Keys and service accounts | `api_key.*`, `service_account.*`, `service_account_key.*`, and `*.pepper_rehash` after a pepper rotation |
 | Agents | `agent.create` (Deployed agent), `agent.update` (Changed agent), `agent.delete` (Deleted agent) |
 | Templates | `agent_template.*`: Created template, Added template version, Asked to publish template, Approved / Rejected template for the catalog, Removed template from the catalog |
 | Model providers, Models, MCP servers | `model_provider.*`, `model.*`, `mcp_server.*` (Added, Changed, Deleted …) |
-| Platform and users (settings) | `platform.personal_settings` (Changed personal workspace defaults), `platform.model_settings` (Changed team provider and MCP server settings) |
+| Platform and users (settings) | `platform.personal_settings` (Changed personal workspace defaults), `platform.model_settings` (Changed team provider and MCP server settings), `platform.secrets_rekey` (Re-sealed stored secrets under the current encryption key: the counts per column, never values; see [Rotating keys](/docs/operate/key-rotation)) |
 | Connected apps | `oauth.consent` (Connected app), `oauth.token_issue` (Issued app token), `oauth.revoke` (Revoked app access; reason `user`, `admin`, `client` or `refresh_reuse`), `oauth.client_register` (Registered app), `oauth.trusted_clients_update` (Changed trusted apps) |
 | Conversations | `thread.admin_read` (Read a private conversation, or Read a team conversation): a platform admin read a conversation, with the reason |
 

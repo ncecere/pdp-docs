@@ -5,6 +5,8 @@ description: "Every Pi Durable Platform setting: its environment variable, defau
 
 Pi Durable Platform reads its configuration at start-up: built-in defaults, then an optional YAML file named by `PDP_CONFIG_FILE`, then environment variables (later sources win). Settings marked **secret** can also be read from a file named by `<NAME>_FILE`, which is how Kubernetes Secrets are usually mounted; surrounding whitespace is trimmed.
 
+This page lists every setting the platform reads. The product's `.env.example` lists the same ones, each with its default, and a test fails if a setting is read but missing from it. On Kubernetes, the [Helm chart](/docs/operate/kubernetes#values) sets the common ones from its values, and its `config` value sets any other.
+
 The YAML file is flat: its keys are the variable names in lower case. Lists can be YAML lists or comma-separated strings. Unknown keys are refused.
 
 ```yaml
@@ -14,6 +16,8 @@ oidc_allowed_groups: [agents-users, agents-admins]
 oidc_client_secret_file: /run/secrets/oidc-client-secret
 ```
 
+The secret settings are `DATABASE_URL`, `AGENTS_DATABASE_URL`, `ENCRYPTION_KEY`, `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER`, `API_KEY_PEPPER_PREVIOUS`, `OIDC_CLIENT_SECRET`, `AGENTS_MODEL_API_KEY` and `AGENTS_SANDBOX_ACTIVATION_TOKEN`. In the YAML file, their `_file` keys name the file.
+
 `pi-durable-platform doctor` checks the configuration without starting anything; see [Doctor and health](/docs/operate/doctor-and-health).
 
 ## Server
@@ -21,6 +25,7 @@ oidc_client_secret_file: /run/secrets/oidc-client-secret
 | Variable | Default | |
 |---|---|---|
 | `APP_URL` | none, required | The public origin, such as `https://agents.example.com`. Used for cookies, OIDC redirects, origin checks and as the OAuth issuer. `https` unless loopback. |
+| `PDP_CONFIG_FILE` | none | The path of the YAML file below. An environment variable only: it isn't a key in the file |
 | `LISTEN_ADDR` | `:8098` | Where the web app and API listen |
 | `DATABASE_URL` | none, required (secret) | The platform database |
 | `MIGRATE_ON_START` | `false` | Apply migrations at start-up |
@@ -48,12 +53,14 @@ oidc_client_secret_file: /run/secrets/oidc-client-secret
 | `OIDC_ISSUER` | none | Your identity provider's issuer URL. Empty disables single sign-on. |
 | `OIDC_CLIENT_ID` | none | Required with `OIDC_ISSUER` |
 | `OIDC_CLIENT_SECRET` | none (secret) | Required with `OIDC_ISSUER` |
-| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid` |
+| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid`. Add `offline_access` to [re-check groups](/docs/operate/oidc#re-checking-groups) while people are signed in |
 | `OIDC_EMAIL_CLAIM` | `email` | The claim holding the email address |
 | `OIDC_GROUPS_CLAIM` | `groups` | The claim holding the person's groups; empty stores none |
 | `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Refuse sign-in unless `email_verified` is true |
 | `OIDC_ALLOWED_EMAIL_DOMAINS` | none (anyone) | Comma-separated email domains allowed to sign in |
-| `OIDC_ALLOWED_GROUPS` | none (anyone) | Only people in one of these groups may sign in; needs `OIDC_GROUPS_CLAIM` |
+| `OIDC_ALLOWED_GROUPS` | none (anyone) | Only people in one of these groups may sign in, and are [re-checked](/docs/operate/oidc#re-checking-groups) while signed in; needs `OIDC_GROUPS_CLAIM` |
+| `OIDC_GROUP_RECHECK_INTERVAL` | `15m` | With `OIDC_ALLOWED_GROUPS`: how often the identity provider is asked whether each recently active person is still in an allowed group. `0` turns the re-check off (groups apply at sign-in only); otherwise 1s to 24h |
+| `OIDC_GROUP_RECHECK_GRACE` | `24h` | How long people keep access while the provider can't be asked, counted from its last answer (0 to 30 days). At least `OIDC_GROUP_RECHECK_INTERVAL` |
 | `BOOTSTRAP_ADMIN_SUBJECT` | none | The OIDC subject made platform admin on its first sign-in, once |
 | `DEV_AUTH` | `false` | Development personas; refused unless `APP_URL` is loopback |
 | `SESSION_TTL` | `12h` | How long a browser session lasts (5m to 30 days) |
@@ -66,12 +73,12 @@ See [OIDC sign-in](/docs/operate/oidc).
 
 | Variable | Default | |
 |---|---|---|
-| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys, MCP headers, apps' MCP headers. |
-| `ENCRYPTION_KEY_PREVIOUS` | none (secret) | The key being rotated away from; still accepted for reads |
+| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys and headers, MCP server headers, apps' thread MCP headers, and each agent's database password and runtime token. |
+| `ENCRYPTION_KEY_PREVIOUS` | none (secret) | The key being rotated away from; still accepted for reads until `pi-durable-platform rekey` has re-sealed every value |
 | `API_KEY_PEPPER` | none, required (secret) | 32 bytes, base64. The HMAC key under which API keys, service account keys and OAuth tokens are stored as digests. |
 | `API_KEY_PEPPER_PREVIOUS` | none (secret) | The pepper being rotated away from. Keys made with it keep working and are re-digested on use. Remove it after 2 to 4 weeks. |
 
-See [Security model](/docs/operate/security#rotating-keys).
+See [Rotating keys](/docs/operate/key-rotation).
 
 ## Agents
 

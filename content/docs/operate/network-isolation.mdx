@@ -3,7 +3,7 @@ title: Network isolation
 description: "Which connections Pi Durable Platform and its agent runtimes need, example NetworkPolicies, and the address guards the platform applies to teams' services and apps' metadata documents."
 ---
 
-Pi Durable Platform is built so that agents need almost no network: in proxy mode they reach models and MCP servers only through the platform. Enforce that with NetworkPolicies. v0.1.2 ships none; the policies below are examples to adapt.
+Pi Durable Platform is built so that agents need almost no network: in proxy mode they reach models and MCP servers only through the platform. Enforce that with NetworkPolicies. The [Helm chart](/docs/operate/kubernetes#network-policies) and the [Kustomize](/docs/operate/kustomize) base ship them; this page lists the connections they allow, and the policies written by hand.
 
 ## The connections
 
@@ -20,9 +20,15 @@ Pi Durable Platform is built so that agents need almost no network: in proxy mod
 
 Nothing else should reach the runtimes. In particular, agent pods should accept traffic from the platform alone, so one agent can't call another's runtime or activate a standby runtime of a warm pool.
 
-## Example policies
+## The policies need a CNI that enforces them
 
-In the agents' namespace: deny everything, then allow what runtimes need.
+NetworkPolicy objects do nothing unless the cluster's network plugin (CNI) enforces them: Cilium and Calico do, and so does kindnet in recent kind. A CNI that ignores them, such as flannel on its own, accepts the objects and leaves agents un-isolated without saying so. Check on your cluster that a connection that should be refused is refused: for example, from an agent pod, try the platform's web port, another agent's pod and the internet. The chart's smoke test does exactly this on kind (see [Install on Kubernetes](/docs/operate/kubernetes#check-that-policies-are-enforced)).
+
+On Cilium, the chart's `networkPolicy.flavor: cilium` (and the Kustomize `components/cilium`) allows the platform's access to the Kubernetes API with a `CiliumNetworkPolicy` for the `kube-apiserver` entity. A standard policy can name the API server only by address.
+
+## The policies by hand
+
+If you don't use the chart or the base, write these. In the agents' namespace: deny everything, then allow what runtimes need.
 
 ```yaml
 apiVersion: networking.k8s.io/v1

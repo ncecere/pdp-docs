@@ -6,11 +6,13 @@ description: "Reaching Pi Durable Platform agents from your own app: the three k
 Your app reaches Pi Durable Platform's agents through its HTTP API, at the platform's `APP_URL` (here `https://agents.example.com`). The app never talks to an agent's runtime: it sends messages to the platform and follows the conversation as server-sent events.
 
 ```sh
-# Send a message (202), then follow the thread
-curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/conv-1/messages \
+# Start a thread (the platform chooses its ID), send a message (202), then follow the thread
+THREAD=$(curl -s -X POST https://agents.example.com/v1/agents/$AGENT/threads \
+  -H "Authorization: Bearer $PDP_KEY" | jq -r .data.threadId)
+curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/messages \
   -H "Authorization: Bearer $PDP_KEY" -H "Content-Type: application/json" \
   -d '{"text": "Hello", "requestId": "m1"}'
-curl -N https://agents.example.com/v1/agents/$AGENT/threads/conv-1/events \
+curl -N https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/events \
   -H "Authorization: Bearer $PDP_KEY"
 ```
 

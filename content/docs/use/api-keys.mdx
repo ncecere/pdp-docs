@@ -43,6 +43,8 @@ A key acts as you on the routes that accept bearer credentials: agents, threads,
 
 A key shares your rate limit (`REQUESTS_PER_MINUTE`, 600 a minute by default) with your browser session and your connected apps.
 
+If your platform admins limit sign-in to identity provider groups, and your account is found to be no longer in one, your keys stop working. They aren't revoked: they work again after you sign in with access restored.
+
 ## Revoke a key
 
 **Revoke…** stops a key at the next request. Revoked and expired keys stay in the list for 30 days, then disappear.

@@ -14,7 +14,7 @@ Every conversation with an agent in Pi Durable Platform is a **thread**, and eve
 
 ## The first message decides
 
-A thread's visibility is chosen with its **first message** and never changes. In the console you pick **Shared** or **Private** above the message box of a new chat. An app sends `"visibility": "private"` with the first message; without it, the thread is shared. Sending a different visibility later is refused.
+A thread's visibility is chosen when it starts, and never changes. In the console that is with its **first message**: you pick **Shared** or **Private** above the message box of a new chat. An app sends `"visibility": "private"` when it starts the thread (with `POST /v1/agents/{id}/threads`, with the first message, or when it sets the thread's MCP servers); without it, the thread is shared. Sending a different visibility later is refused.
 
 To change your mind, start a new chat.
 

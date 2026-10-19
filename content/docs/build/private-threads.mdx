@@ -5,18 +5,25 @@ description: "Thread visibility in Pi Durable Platform's API, how the platform s
 
 ## Visibility
 
-A thread is `shared` or `private`, chosen by its **first** message:
+A thread is `shared` or `private`, chosen **when it starts**. Three things start a thread, and the first one to happen chooses:
 
-```json
-{"text": "Draft my performance review", "requestId": "r1", "visibility": "private"}
-```
+- `POST /v1/agents/{agentId}/threads` with `{"visibility": "private"}`, which also gives you an ID nobody can guess ([Start a thread](/docs/build/threads-and-messages#start-a-thread));
+- its first message, with `visibility`:
+
+  ```json
+  {"text": "Draft my performance review", "requestId": "r1", "visibility": "private"}
+  ```
+
+- setting its [MCP servers](/docs/build/thread-mcp-servers), with `visibility` in the body of the `PUT`.
+
+When none says, the thread is shared.
 
 - **Shared** (the default): everyone who may use the agent sees it, sends to it and follows it.
 - **Private**: only the person or service account that started it. On every thread route (read, send, stop, events, rename, delete, thread MCP servers), in lists and in event streams, someone else's private thread answers `404 thread_not_found`, exactly like a thread that doesn't exist.
 
-Later messages may omit `visibility`; a different value is `409 visibility_fixed`.
+Later requests may omit `visibility`. It never changes: a different value is `409 visibility_fixed`, whichever of the three sent it.
 
-The platform writes the thread's record (creator and visibility) **before** relaying the first message, so a private thread is never briefly shared. Threads from before the platform kept records, which it learns of from the agent, count as shared.
+The platform writes the thread's record (creator and visibility) when the thread starts, **before** relaying the first message, so a private thread is never briefly shared. Threads from before the platform kept records, which it learns of from the agent, count as shared.
 
 For a person's own conversations with a **team's** agent, send `private`. In a personal workspace only its owner reaches the agent, so shared is fine there.
 

@@ -1,38 +1,42 @@
 ---
 title: Install on Kubernetes
-description: "Deploy Pi Durable Platform on Kubernetes with the kubernetes launcher: images, databases, secrets, the platform's RBAC, Deployment, Service, ingress, and the agent pods it creates."
+description: "Install Pi Durable Platform on Kubernetes with its Helm chart: what it deploys, the databases and Secrets to create first, the values to set, the launchers, network policies, checking, upgrading and verifying the signed chart."
 ---
 
-This page installs Pi Durable Platform with `AGENTS_LAUNCHER=kubernetes`: the platform creates a pod for each running agent and deletes it when the agent hibernates. v0.1.2 ships no manifests, so the YAML below is an **example to adapt**, written from what the platform needs. Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
+Pi Durable Platform ships a **Helm chart**. It deploys the platform, the namespace agents run in, the permissions the platform needs there, and the NetworkPolicies that keep agents apart from each other and from the cluster. The same objects are also available as [Kustomize](/docs/operate/kustomize) resources, and [the objects by hand](/docs/operate/manual-manifests) are described as a reference.
 
-## 1. The images
+Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
 
-Use the release's images, pinned by digest (the digests are on the [release page](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.2)). Verify their signatures with cosign v3 or newer:
+## What the chart deploys
 
-```sh
-for image in pi-durable-platform pi-durable-platform-runtime; do
-  cosign verify ghcr.io/ncecere/$image:v0.1.2 \
-    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.1.2 \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com
-done
-```
+- **The platform**: one Deployment, with a Service for the web app and API (port 80, to 8098) and a separate Service for the gateway agents call for models (8099). It runs as a non-root user, with a read-only root filesystem, no capabilities and the default seccomp profile.
+- **The agents namespace** (`pi-durable-agents` by default), with the `restricted` Pod Security level. Agent pods, or Agent Sandbox runtimes, run here and nothing else does.
+- **Permissions**: a ServiceAccount for the platform, and a Role and RoleBinding **in the agents namespace only**, with exactly the verbs the launcher uses. Nothing is cluster-wide.
+- **NetworkPolicies**: see [Network policies](#network-policies).
+- Optionally an Ingress, a PodDisruptionBudget and a ResourceQuota for the agents namespace.
+- With `agent-sandbox` and a warm pool, a SandboxTemplate and a SandboxWarmPool.
 
-## 2. Databases
+The chart does **not** install PostgreSQL, your ingress controller, TLS certificates or DNS, or Agent Sandbox's controller.
 
-Create the platform database and the agents database, and their roles, as [Databases](/docs/operate/databases) describes. The agents database's role needs `CREATEROLE` and `CREATE` on that database. Agent pods connect to the agents database with roles of their own, so it must be reachable from the agents' namespace.
+<Callout type="info" title="One replica">
+The platform runs as one replica. The chart's schema refuses a larger `replicaCount`: the idle reaper only knows the event streams open on its own process. The Deployment replaces its pod instead of rolling it, so an upgrade has a short outage.
+</Callout>
 
-## 3. Namespaces
+## Before you install
 
-Agents run in `AGENTS_NAMESPACE`, by default the platform's own namespace. A separate namespace for agents makes RBAC and network policies simpler:
+1. **Kubernetes 1.27 or newer, Helm 3 or 4**, and a **CNI that enforces NetworkPolicy** (Cilium, Calico, or kindnet in recent kind). A CNI that ignores NetworkPolicy, such as flannel on its own, leaves agents un-isolated and says nothing. See [Check that policies are enforced](#check-that-policies-are-enforced).
+2. **PostgreSQL 17** with two databases: the platform's, and the agents' with a role that has `CREATEROLE` and `CREATE` on it. See [Databases](/docs/operate/databases). Any PostgreSQL 17 the cluster can reach works, managed services included. The repository has an example for CloudNativePG, with the NetworkPolicies its pods need.
+3. **An OIDC client** at your identity provider, with the redirect URI `https://agents.example.com/auth/callback`. See [OIDC sign-in](/docs/operate/oidc).
+4. **An ingress controller and TLS** for the host in `appUrl`. The platform refuses a non-loopback `http://` address.
+5. For the `agent-sandbox` launcher, [Agent Sandbox](https://agent-sandbox.sigs.k8s.io) with its extensions (SandboxTemplate, SandboxWarmPool and SandboxClaim) installed first.
+
+## 1. The namespace and the Secret
+
+The chart creates the agents namespace, not the platform's. Create it, and the Secret the platform reads:
 
 ```sh
 kubectl create namespace pi-durable-platform
-kubectl create namespace pi-durable-agents
-```
-
-## 4. Secrets
-
-```sh
+kubectl label namespace pi-durable-platform pod-security.kubernetes.io/enforce=restricted
 kubectl -n pi-durable-platform create secret generic pi-durable-platform \
   --from-literal=DATABASE_URL='postgres://pdp:<password>@db.example.com:5432/pdp?sslmode=require' \
   --from-literal=AGENTS_DATABASE_URL='postgres://pdp_agents_admin:<password>@db.example.com:5432/pdp_agents?sslmode=require' \
@@ -41,120 +45,170 @@ kubectl -n pi-durable-platform create secret generic pi-durable-platform \
   --from-literal=OIDC_CLIENT_SECRET='<from your identity provider>'
 ```
 
-Keep `ENCRYPTION_KEY` and `API_KEY_PEPPER` in your secrets store too: a database backup is useless without them. Every secret setting can also be read from a file, with `<NAME>_FILE` (see [Configuration](/docs/operate/configuration)).
+| Key | |
+|---|---|
+| `DATABASE_URL` | Required: the platform's database |
+| `AGENTS_DATABASE_URL` | Required: the agents database, with the provisioning role. Its host must resolve from the agents namespace (`service.namespace.svc`), or set `agents.runtimeDatabaseHost` |
+| `ENCRYPTION_KEY`, `API_KEY_PEPPER` | Required: `openssl rand -base64 32` each, with different values |
+| `OIDC_CLIENT_SECRET` | With OIDC |
+| `ENCRYPTION_KEY_PREVIOUS`, `API_KEY_PEPPER_PREVIOUS`, `AGENTS_MODEL_API_KEY` | Optional: during [key rotation](/docs/operate/key-rotation), and for an OpenAI-compatible default model |
 
-## 5. The platform's permissions
+Keep `ENCRYPTION_KEY` and `API_KEY_PEPPER` with your backups: a database backup is useless without them. Secrets are never rendered into a manifest, the ConfigMap or the chart's values. A setting can come from another Secret, for example `secrets.databaseUrl: {name: pdp-db-app, key: uri}`. The repository's `deploy/secrets.example.yaml` shows the same Secret with fake values.
 
-The platform talks to the Kubernetes API with its pod's service account token. In the agents' namespace it needs:
+If the Secret is missing, the pod waits in `CreateContainerConfigError` until it exists.
 
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata: { name: pi-durable-platform-agents, namespace: pi-durable-agents }
-rules:
-  - apiGroups: [""]
-    resources: [pods]
-    verbs: [get, list, create, delete]
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get, create, update, delete]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata: { name: pi-durable-platform-agents, namespace: pi-durable-agents }
-roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: pi-durable-platform-agents }
-subjects:
-  - { kind: ServiceAccount, name: pi-durable-platform, namespace: pi-durable-platform }
-```
+## 2. The values
 
-It needs nothing outside that namespace. The [Agent Sandbox](/docs/operate/agent-sandbox) launcher needs other resources.
-
-## 6. The Deployment and Service
+Write a `values.yaml`:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: pi-durable-platform } }
-  template:
-    metadata: { labels: { app: pi-durable-platform } }
-    spec:
-      serviceAccountName: pi-durable-platform
-      terminationGracePeriodSeconds: 75
-      containers:
-        - name: platform
-          image: ghcr.io/ncecere/pi-durable-platform:v0.1.2   # pin @sha256:… from the release
-          args: [serve]
-          envFrom: [{ secretRef: { name: pi-durable-platform } }]
-          env:
-            - { name: APP_URL, value: https://agents.example.com }
-            - { name: MIGRATE_ON_START, value: "true" }
-            - { name: OIDC_ISSUER, value: https://idp.example.com }
-            - { name: OIDC_CLIENT_ID, value: pi-durable-platform }
-            - { name: BOOTSTRAP_ADMIN_SUBJECT, value: "<your OIDC subject>" }
-            - { name: TRUSTED_PROXIES, value: 10.0.0.0/8 }              # your ingress's addresses
-            - { name: AGENTS_LAUNCHER, value: kubernetes }
-            - { name: AGENTS_NAMESPACE, value: pi-durable-agents }
-            - { name: AGENTS_IMAGE, value: ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.2 }
-            - { name: AGENTS_GATEWAY_ADDR, value: ":8099" }
-            - { name: AGENTS_GATEWAY_URL, value: http://pi-durable-platform.pi-durable-platform.svc.cluster.local:8099 }
-          ports:
-            - { name: http, containerPort: 8098 }
-            - { name: gateway, containerPort: 8099 }
-          readinessProbe: { httpGet: { path: /readyz, port: http } }
-          livenessProbe: { httpGet: { path: /healthz, port: http } }
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities: { drop: [ALL] }
----
-apiVersion: v1
-kind: Service
-metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
-spec:
-  selector: { app: pi-durable-platform }
-  ports:
-    - { name: http, port: 80, targetPort: http }
-    - { name: gateway, port: 8099, targetPort: gateway }
+appUrl: https://agents.example.com
+oidc:
+  issuer: https://idp.example.com/application/o/pi-durable-platform/
+  clientId: pi-durable-platform
+  allowedGroups: [pi-durable-users]           # optional: limit sign-in to IdP groups
+  bootstrapAdminSubject: "<your OIDC subject>" # becomes platform admin on first sign-in
+trustedProxies: [10.244.0.0/16]               # your ingress controller's pod CIDR
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    - secretName: pdp-tls
+networkPolicy:
+  kubeApiServer:
+    cidrs: [192.0.2.10/32]                    # the API server's address, see below
+  database:
+    podLabels:
+      cnpg.io/cluster: pdp-db                 # your PostgreSQL pods (or cidrs: [...])
+  ingress:
+    from:                                     # who may reach the web port
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
 ```
 
-Notes:
-
-- **One replica.** v0.1.2 supports one platform replica. Rate limits, thread events and OAuth state go through PostgreSQL, but the idle reaper only knows the event streams open on its own replica, and several replicas haven't been tested.
-- **`AGENTS_GATEWAY_ADDR`** defaults to `127.0.0.1:8099`, which agent pods can't reach: listen on `:8099` and set **`AGENTS_GATEWAY_URL`** to the address agents use, the Service's name and gateway port.
-- **Migrations**: with `MIGRATE_ON_START=true` the platform applies them at start. Otherwise run `pi-durable-platform migrate` (for example as a Job with the same image and `args: [migrate]`) before rolling out; a platform whose database is behind refuses to start. See [Upgrades and migrations](/docs/operate/upgrades).
-- **Shutdown**: on SIGTERM the platform fails readiness, waits `SHUTDOWN_DELAY` (5 s), then gives requests `SHUTDOWN_TIMEOUT` (60 s). Make `terminationGracePeriodSeconds` longer than both. Open event streams end then; clients reconnect.
-- **The image has no shell.** Run checks with `kubectl exec deploy/pi-durable-platform -- /pi-durable-platform doctor`.
-
-## 7. Ingress
-
-Route your HTTPS host to the Service's `http` port (8098) only. Never route the gateway port: it is for agents. The OIDC redirect address is `https://agents.example.com/auth/callback`. Set `TRUSTED_PROXIES` to the ingress's addresses so the platform sees clients' real addresses for rate limits and the audit log.
-
-## 8. The agent pods
-
-For each running agent the platform creates a Secret and a pod named `agent-<id>` in `AGENTS_NAMESPACE`, labelled `app.kubernetes.io/managed-by: pi-durable-platform` and `pi-durable-platform/agent-id: <id>`. The pod:
-
-- runs the runtime image as user 10001, non-root, with a read-only root filesystem, all capabilities dropped, the `RuntimeDefault` seccomp profile, and a 64 MiB `/tmp`;
-- has no service account token and no service links;
-- requests 50m CPU and 160 MiB memory, limited to 1 CPU and 512 MiB;
-- gets its database URL and per-agent bearer token from its Secret, never from the pod spec;
-- listens on port 4100 and accepts only its own token.
-
-Optional settings: `AGENTS_RUNTIME_CLASS` runs the pods with a sandboxing RuntimeClass such as gVisor, and `AGENTS_IMAGE_PULL_SECRET` names a registry Secret in the agents' namespace. Hibernating deletes the pod and keeps the Secret; deleting the agent deletes both.
-
-Then restrict the network: see [Network isolation](/docs/operate/network-isolation).
-
-## 9. Check it
+With the standard NetworkPolicy flavour, the platform can reach the Kubernetes API only by address, because a standard policy can't name it. Find it:
 
 ```sh
+kubectl get endpointslices -l kubernetes.io/service-name=kubernetes \
+  -o jsonpath='{.items[0].endpoints[*].addresses[*]}'
+```
+
+and list each address as a `/32`. The chart refuses to render without it, rather than leave the launcher unable to start agents. With Cilium, use [`flavor: cilium`](#network-policies) instead and no address.
+
+## 3. Install
+
+Pin both images by digest, from the release notes. Without a digest the default tag is `v<appVersion>`, the release the chart belongs to.
+
+```sh
+helm install pi-durable-platform oci://ghcr.io/ncecere/charts/pi-durable-platform --version 0.2.0 \
+  -n pi-durable-platform -f values.yaml \
+  --set images.platform.digest=sha256:<platform digest> \
+  --set images.runtime.digest=sha256:<runtime digest>
+```
+
+The chart is published, and signed, to `oci://ghcr.io/ncecere/charts/pi-durable-platform` for each release tag; its version is the release's (v0.2.0 is chart 0.2.0). From a checkout of the repository you can install `deploy/helm/pi-durable-platform` instead: its images are the release named in its `Chart.yaml`.
+
+### Verify the chart
+
+Verify a published chart with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) v3.0 or newer (keyless, GitHub Actions OIDC), as you verify the images:
+
+```sh
+cosign verify ghcr.io/ncecere/charts/pi-durable-platform:0.2.0 \
+  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/chart.yml@refs/tags/v0.2.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The images are verified with the identity of the `image.yml` workflow, as the [release notes](/docs/releases) of each version show.
+
+## 4. Check it
+
+```sh
+kubectl -n pi-durable-platform rollout status deploy/pi-durable-platform
 kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform doctor
 ```
 
-Sign in as the bootstrap admin, create a team, deploy an agent and send it a message on its **Test** tab. A pod `agent-…` appears in the agents' namespace, and goes away after `AGENTS_IDLE_TIMEOUT` (10 minutes) without use.
+`doctor` checks the configuration, both databases, migrations, the agents provisioning role and the keys. See [Doctor and health checks](/docs/operate/doctor-and-health). Then sign in at `appUrl`. The person whose OIDC subject is `oidc.bootstrapAdminSubject` becomes platform admin at their first sign-in, once. Teams, agents, models and MCP servers are managed in the web app, not by the deployment.
+
+Agents use the scripted `demo` model until you add a provider in **Admin › Models**, or set `agents.model`.
+
+## Launchers
+
+- `agents.launcher: kubernetes` (the default): one pod per agent.
+- `agents.launcher: agent-sandbox`: install Agent Sandbox first. With the warm pool (`agentSandbox.warmPool.enabled` and `size`), the chart creates the SandboxTemplate and the SandboxWarmPool, and the platform creates the pool's activation Secret (`agentSandbox.activationSecret`) itself. Without it, each agent is a Sandbox that is suspended when idle.
+
+See [Agent Sandbox and warm pools](/docs/operate/agent-sandbox).
+
+The Role the chart creates has the verbs of the launcher you choose:
+
+| Launcher | Rules in the agents namespace |
+|---|---|
+| `kubernetes` | pods: get, list, watch, create, delete; secrets: get, create, update, delete |
+| `agent-sandbox`, warm pool | sandboxclaims: get, list, watch, create, delete; secrets: get, create, delete |
+| `agent-sandbox`, no warm pool | sandboxes: get, list, watch, create, patch, delete; pods: get; secrets: get, create, update, delete |
+
+## Values
+
+`values.yaml` in the chart documents every value, and `values.schema.json` rejects unknown keys and wrong types. The ones you will set:
+
+| Value | |
+|---|---|
+| `appUrl` | Required: the public origin |
+| `images.platform`, `images.runtime` (`tag`, `digest`) | The default tag is `v<appVersion>`; pin by digest |
+| `secrets.name`, and a `{name, key}` for each setting | Where the database URLs, the two keys and the OIDC secret are read |
+| `oidc.*` | Issuer, client ID, claims, `scopes`, `allowedGroups`, `allowedEmailDomains`, `bootstrapAdminSubject` |
+| `agents.*` | Namespace, launcher, idle timeout, runtime class, pull Secret, database host for runtimes, default model, apps' MCP hosts, quota |
+| `agentSandbox.*` | Warm pool on or off and its size, names, runtime resources |
+| `ingress.*` | Class, host (default: the host of `appUrl`), path, TLS, annotations |
+| `networkPolicy.*` | See [Network policies](#network-policies) |
+| `resources`, `podSecurityContext`, `securityContext` | Defaults are restricted: non-root, read-only root filesystem, no capabilities, seccomp |
+| `terminationGracePeriodSeconds` | 30 by default. The platform waits `SHUTDOWN_DELAY` (5 s) and then gives requests `SHUTDOWN_TIMEOUT` (60 s) to finish, so raise it, to 75 for example, if you want them the full time |
+| `replicaCount` | 1: the schema refuses more |
+| `podDisruptionBudget.*` | Off by default: with one replica, a budget of `minAvailable: 1` blocks node drains |
+| `config`, `extraEnv`, `extraEnvFrom`, `extraVolumes` | Any other [setting](/docs/operate/configuration) of the platform, for example `config: {OIDC_GROUP_RECHECK_INTERVAL: 30m}` |
+
+The ConfigMap holds every non-secret setting. The pod restarts when it changes (`rolloutOnConfigChange`).
+
+## Network policies
+
+The policies are what isolates agents. They need a CNI that enforces them.
+
+- **Agents namespace**: everything is denied. An agent pod takes traffic only from the platform (port 4100) and reaches only its PostgreSQL (5432), the platform's gateway (8099) and cluster DNS. It can't reach other agents, the platform's web port, the Kubernetes API or the internet.
+- **The platform's pods**: web traffic (8098) from the peers you list in `networkPolicy.ingress.from`, and the gateway port from agent pods only. They reach DNS, PostgreSQL, agent pods (4100), the Kubernetes API, and public HTTPS (the identity provider, model providers and MCP servers by their public names; private ranges are excluded).
+
+`networkPolicy.*` has these settings:
+
+| Value | |
+|---|---|
+| `flavor` | `standard` (Kubernetes NetworkPolicy only, with `kubeApiServer.cidrs`) or `cilium` (also a `CiliumNetworkPolicy` that allows the `kube-apiserver` entity, so no address is needed) |
+| `kubeApiServer.cidrs`, `ports` | The API server's addresses and ports (443 and 6443), for the standard flavour. Required there |
+| `database` | Required: PostgreSQL's pods (`podLabels`, in `namespace`, by default the release's) and/or external `cidrs`, and `port`. The platform and agent pods may reach them. PostgreSQL's own pods need ingress from both: if your namespace denies by default, allow it |
+| `ingress.from` | Who may reach the web port. The default is every namespace: narrow it to your ingress controller's |
+| `egress.publicHttps` | Public HTTPS egress for the platform, with the private ranges excluded |
+| `egress.extra`, `agents.extraEgress` | More egress rules for the platform pods and for agent pods, for direct-mode providers and MCP servers on addresses agents otherwise can't reach |
+
+`networkPolicy.enabled: false` removes every policy, and agents are then **not isolated**. Only do that where something else enforces the same rules.
+
+See [Network isolation](/docs/operate/network-isolation) for the connections each side needs.
+
+### Check that policies are enforced
+
+A cluster whose CNI ignores NetworkPolicy accepts the objects and enforces nothing. Check, as the repository's smoke test does: from an agent pod, a connection that should be refused must be refused.
+
+The smoke test (`deploy/scripts/smoke-kind.sh`) installs the chart into a kind cluster, whose default CNI, kindnet, enforces NetworkPolicy. It checks that `doctor` passes, that the launcher has the rights it needs and no more, that an agent answers a message and hibernates and wakes, and that from an agent pod only the database and the gateway are reachable (not the web port, the Kubernetes API, the internet or another agent) and that a pod outside the platform can't reach an agent. Continuous integration runs it for every change to `deploy/`. It pulls the released images the chart names, so it tests the chart, not the platform's code.
+
+## Upgrading
+
+Set the new chart version, and the new release's digests, and run `helm upgrade`. The platform applies its migrations at start (`migrateOnStart`, on by default). The single replica is replaced, not rolled, so there is a short outage. A warm pool replaces its standby runtimes at once. Agents that are running move to the new runtime image when they next wake. See [Upgrades and migrations](/docs/operate/upgrades).
+
+## Uninstalling
+
+`helm uninstall` keeps the agents namespace (`agents.keepNamespace`), because deleting it deletes every agent's Secret. The databases are yours.
+
+## What the chart doesn't include
+
+- PostgreSQL, and its backups.
+- The ingress controller, TLS certificates and DNS.
+- Agent Sandbox's controller and CRDs.
+- Several replicas, and metrics.
+- Direct-mode providers and MCP servers on private addresses: agents reach only the database, the gateway and DNS. Give them more with `networkPolicy.agents.extraEgress`, and the platform with `networkPolicy.egress.extra`.

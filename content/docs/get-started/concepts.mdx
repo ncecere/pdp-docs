@@ -50,9 +50,9 @@ A **service-managed agent** is one an app creates with a service account key and
 
 ## Threads
 
-A conversation with an agent is a **thread**. The client names it (`threadId`, 1 to 64 letters, digits, dashes or underscores) and its first message creates it.
+A conversation with an agent is a **thread**. An app asks the platform to start one, and gets an ID nobody can guess (`threadId`, 1 to 64 letters, digits, dashes or underscores). It can also name the thread itself, in which case its first message creates it. In the console, a new chat starts one.
 
-A thread is **shared** (everyone who may use the agent sees it) or **private** (only the person or service account that started it). The first message chooses, and it never changes. Each message records its **author**. See [Shared and private threads](/docs/use/shared-and-private-threads).
+A thread is **shared** (everyone who may use the agent sees it) or **private** (only the person or service account that started it). It is chosen when the thread starts, and it never changes. Each message records its **author**. See [Shared and private threads](/docs/use/shared-and-private-threads).
 
 ## Hibernating runtimes
 

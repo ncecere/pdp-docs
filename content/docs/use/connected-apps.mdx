@@ -52,6 +52,7 @@ Your account menu › **Connected apps** lists the apps you allowed, with when y
 - The app's access tokens last an hour; it refreshes them itself.
 - A refresh token lasts 30 days and is replaced every time it's used, so an app you use at least monthly stays connected until you disconnect it.
 - If an old refresh token is used again more than 30 seconds after it was replaced, the platform treats it as stolen and ends the connection. You connect again.
+- If your platform admins limit sign-in to identity provider groups, and your account is found to be no longer in one, your connected apps are disconnected. Once you can sign in again, connect them again.
 
 ## Who else can see them
 

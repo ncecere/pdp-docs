@@ -1,0 +1,114 @@
+---
+title: Rotating keys
+description: "Rotate Pi Durable Platform's two keys: re-seal every stored secret under a new ENCRYPTION_KEY with the rekey command, move to a new API_KEY_PEPPER, and check each step with doctor."
+---
+
+Two keys protect what the platform's database holds. They rotate differently.
+
+| Key | Protects | How it rotates |
+|---|---|---|
+| `ENCRYPTION_KEY` | Secrets the platform must use again: model provider keys and headers, MCP server headers, apps' thread MCP headers, and each agent's database password and runtime token. They are sealed with AES-256-GCM | `pi-durable-platform rekey` re-seals them under the new key |
+| `API_KEY_PEPPER` | The digests of API keys, service account keys and OAuth Connect tokens and codes. Digests can't be reversed | Each moves to the new pepper the next time it is used |
+
+Both keys are 32 random bytes in base64: `openssl rand -base64 32`.
+
+## Rotating `ENCRYPTION_KEY`
+
+A sealed value records which key sealed it, so the platform knows which values are still under the old key without opening them. That is how `doctor` counts them, and how `rekey` finds them.
+
+<Steps>
+<Step>
+
+**Make the new key current.** Generate a key. Set it as `ENCRYPTION_KEY`, and set the old one as `ENCRYPTION_KEY_PREVIOUS`. With the Helm chart, that is the keys `ENCRYPTION_KEY` and `ENCRYPTION_KEY_PREVIOUS` of the platform's Secret (or the Secrets named by `secrets.encryptionKey` and `secrets.encryptionKeyPrevious`). Restart the platform.
+
+New and changed secrets are now sealed under the new key. Old ones still open with the previous key.
+
+</Step>
+<Step>
+
+**Count.** Run `rekey` with `--dry-run`. It lists, for each sealed column, how many values are under each key, and opens each value that isn't under the new key to check it opens. It changes nothing.
+
+```sh
+kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform rekey --dry-run
+```
+
+```text
+column                              current  previous  unreadable
+agents.db_password_enc                    0        12           0
+agents.runtime_token_enc                  0        12           0
+model_providers.api_key_enc               0         3           0
+model_providers.headers_enc               0         2           0
+mcp_servers.headers_enc                   0         4           0
+thread_mcp_servers.headers_enc            0         1           0
+
+dry run: 0 value(s) under ENCRYPTION_KEY, 34 under the previous key (a run would re-seal them), 0 unreadable
+```
+
+(The counts here are an example.) An **unreadable** value opens with neither key: a missing `ENCRYPTION_KEY_PREVIOUS`, a third key, or damage. Fix that before you go on.
+
+</Step>
+<Step>
+
+**Re-seal.** Run `rekey`.
+
+```sh
+kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform rekey
+```
+
+It works column by column, in batches of rows (`--batch`, 200 by default, up to 5,000), one transaction per batch. It prints the same table with how many values it re-sealed in each column.
+
+</Step>
+<Step>
+
+**Check, then remove the old key.** Run `doctor`. Its `keys encryption` check warns while any value is still under the previous key, and fails for a value under no configured key. When it reports that no value is under `ENCRYPTION_KEY_PREVIOUS`, remove `ENCRYPTION_KEY_PREVIOUS` and restart.
+
+</Step>
+</Steps>
+
+### What `rekey` does and doesn't do
+
+- **It is safe while the platform serves.** A value is replaced only if its row still holds the ciphertext `rekey` read, so a secret someone saves meanwhile is never overwritten with its old value. `rekey` doesn't change a row's revision or time of last change. If some were saved by someone else during the run, it says how many and suggests running again.
+- **You can repeat it, and resume it.** Values already under the new key are not touched. If a run is interrupted, run it again: only the batch in flight is lost, and it is retried.
+- **It stops before it changes anything** if a value opens with neither key. It names the columns and rows, never the values.
+- **It writes one audit entry**, **Re-sealed stored secrets under the current encryption key**, with the counts per column and no values. See [Audit log](/docs/administer/audit-log).
+- **It needs a migrated database.** If the database is behind the binary it says so; run `migrate` first.
+- **It re-seals values in the platform's database only.** It doesn't touch Kubernetes Secrets.
+- **Backups keep the old key's values.** A backup of the platform database taken before `rekey` has its values under the old key. Keep the old key as long as you may restore from such a backup, as you keep `ENCRYPTION_KEY` itself (see [Backups](/docs/operate/backups)).
+
+<Callout type="warn" title="Identity provider refresh tokens are not re-sealed">
+With [group re-checks](/docs/operate/oidc#re-checking-groups), the platform keeps each person's identity provider refresh token, sealed with `ENCRYPTION_KEY`. `rekey` and `doctor` don't cover these tokens. Once you remove `ENCRYPTION_KEY_PREVIOUS`, the platform can't open a token sealed under the old key: it logs an error each time it tries and doesn't re-check that person until they sign in again, which stores a new token. Until then they keep the access they had. If you rely on group re-checks, keep `ENCRYPTION_KEY_PREVIOUS` until people have signed in again, or for as long as it suits you.
+</Callout>
+
+### If you lose the key
+
+Without `ENCRYPTION_KEY`, and the previous key for values still sealed under it, the platform can't read what it sealed. Nothing can recover those values: restore a backup together with the key that sealed it.
+
+## Rotating `API_KEY_PEPPER`
+
+<Steps>
+<Step>
+
+Set the new value as `API_KEY_PEPPER`, and the old one as `API_KEY_PEPPER_PREVIOUS`. Restart the platform.
+
+</Step>
+<Step>
+
+Keys, tokens and codes made with the old pepper keep working, and are re-digested under the new one the next time they are used (`*.pepper_rehash` in the [audit log](/docs/administer/audit-log)).
+
+</Step>
+<Step>
+
+`doctor`'s `keys pepper` check counts the usable keys still on the previous pepper. After 2 to 4 weeks, remove `API_KEY_PEPPER_PREVIOUS`. Keys not used by then stop working: their owners create new ones, and apps connect again.
+
+</Step>
+</Steps>
+
+Changing `API_KEY_PEPPER` **without** keeping the old value as `API_KEY_PEPPER_PREVIOUS` invalidates every API key, service account key and app token at once.
+
+## The example keys
+
+The keys in the repository's `.env.example` are public. The platform refuses them on any `APP_URL` that isn't a loopback address. If you ever stored secrets under the example `ENCRYPTION_KEY`, generate a real one, set the example as `ENCRYPTION_KEY_PREVIOUS`, and run `rekey`: the same steps as above. A key digested under the example `API_KEY_PEPPER` was never protected; revoke those keys instead of keeping them valid.
+
+## Other secrets
+
+The warm pool's activation token has its own steps: see [Agent Sandbox](/docs/operate/agent-sandbox#rotating-the-activation-token). The OIDC client secret is changed at your identity provider and in `OIDC_CLIENT_SECRET`.

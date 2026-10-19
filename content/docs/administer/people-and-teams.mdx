@@ -21,6 +21,14 @@ Platform admins can:
 
 The last active platform admin can't be demoted or suspended.
 
+### Group access ended
+
+When the platform [re-checks identity provider groups](/docs/operate/oidc#re-checking-groups) and finds that someone is no longer in an allowed group, their **Status** reads **Group access ended** instead of **Active**, in the list and on their page. Point at the badge to see why: they are no longer in a group allowed to sign in, the provider no longer vouches for them (disabled, or their grant was revoked or expired), or it couldn't confirm their groups within the grace period.
+
+The person's page repeats the reason and says that their sessions and connected apps were ended. Their API keys stop working while the badge shows, and their teams, agents and data stay. They can sign in again once the provider lists them in an allowed group, and the badge goes. This is not a suspension: **Suspend…** and **Reactivate** are yours alone, and the two never undo each other. There is nothing to do on this page to restore access: change the person's groups at your provider.
+
+The audit log records both ends: **Ended access: no longer in an allowed group** and **Restored access: back in an allowed group**.
+
 ## Teams
 
 **Admin › Teams** lists every team and personal workspace, with its kind, owners and status. Filter by kind to see only teams or only personal workspaces.

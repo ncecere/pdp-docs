@@ -11,8 +11,20 @@ description: "pi-durable-platform doctor, the /healthz and /readyz probes, logs 
 2. **Safety**: the [production safety checks](/docs/operate/configuration#production-safety-checks).
 3. **PostgreSQL**: connects to the platform database and reports its version and the time it took.
 4. **Migrations**: whether the database is at the binary's migration.
-5. **Keys**: during an `API_KEY_PEPPER` rotation, how many keys are still on the previous pepper.
+5. **Keys**: which pepper the usable API keys are on, and which `ENCRYPTION_KEY` every stored secret is sealed with.
 6. **Agents database** (since v0.1.1): connects to `AGENTS_DATABASE_URL` and checks that its role can provision agents. It reads the role's attributes and privileges and creates nothing.
+7. **Agent roles**: whether the agents database has roles left behind by agents that no longer exist.
+
+Each check ends as **ok**, **info** (worth knowing), **warn** (something to do, but the platform works) or **fail**. `doctor` exits 1 only when a check fails: a warning exits 0.
+
+## The keys checks
+
+| Check | OK when | Otherwise |
+|---|---|---|
+| `keys pepper` | Every usable key, service account key and app token is under `API_KEY_PEPPER` | **Info** while some are on `API_KEY_PEPPER_PREVIOUS` (they move when used), or on a pepper no longer configured (those no longer work: revoke them). **Info** too when none is left on the previous pepper: you can remove it |
+| `keys encryption` | Every stored secret is sealed with `ENCRYPTION_KEY` | **Warn** while any value is still sealed with `ENCRYPTION_KEY_PREVIOUS`, naming the columns and counts: run `rekey`, then remove the previous key. **Fail** when a value is sealed with neither key, since the platform can't read it. **Info** when none is under the previous key and `ENCRYPTION_KEY_PREVIOUS` can go |
+
+The `keys encryption` check reads only the key IDs stored with the values, and opens nothing. See [Rotating keys](/docs/operate/key-rotation).
 
 ## The agents database checks
 
@@ -25,13 +37,26 @@ Each agent gets its own role and schema in the agents database, which is why the
 
 Without `AGENTS_DATABASE_URL` the checks are skipped, reported as info ("agents can't be deployed"): the configuration checks already say whether your launcher needs it.
 
+### The agent roles check
+
+Roles are server-wide in PostgreSQL, so dropping or recreating the agents database leaves its agents' roles behind. When the provisioning check passes, `agents roles` lists the roles named like agents' (`agent_…`) that belong to no agent in the platform database and have no schema in the agents database.
+
+| Result | Meaning |
+|---|---|
+| **ok** | Every agent role belongs to an agent, or to a schema in the agents database |
+| **info**, with names | These roles belong to no agent. Run `pi-durable-platform prune-roles --dry-run`, then `prune-roles`. It also counts roles that look like agents' but that `prune-roles` would leave alone |
+| **info**, skipped | The platform database is unavailable or its migrations are pending, so the agents' roles are unknown |
+
+See [Databases and roles](/docs/operate/databases#clean-up).
+
 ```sh
 pi-durable-platform doctor            # text report
 pi-durable-platform doctor --json     # for scripts
 pi-durable-platform doctor --timeout 20s
+pi-durable-platform doctor --mode migrate   # validate the configuration for `migrate` only
 ```
 
-It exits 1 if any check fails, with a fix for each failure. The image has no shell; on Kubernetes run:
+It exits 1 if any check fails, with a fix for each failure or warning. The image has no shell; on Kubernetes run:
 
 ```sh
 kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform doctor

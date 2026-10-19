@@ -23,7 +23,7 @@ The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_gr
 | `401` | `unauthorized` | The key or token is invalid, expired or revoked. For an OAuth token, refresh once, then reconnect ([OAuth Connect](/docs/build/oauth-connect#7-handle-a-refused-token)). |
 | `403` | `forbidden`, `person_required` | The caller's role doesn't allow it, or a service account called a route about a person |
 | `404` | `agent_not_found`, `thread_not_found`, `team_not_found`, `template_not_found`, … | Doesn't exist, **or** the caller may not see it (another team's agent, another's private thread) |
-| `409` | `visibility_fixed` | The thread's visibility was set by its first message |
+| `409` | `visibility_fixed` | The thread's visibility was set when it started (by `POST …/threads`, its first message, or its MCP servers) and a request asked for another |
 | | `agent_disabled` | The agent is turned off |
 | | `agent_model_unavailable`, `model_unavailable` | The model isn't available to the team or workspace |
 | | `name_taken` | Another agent in the team has this name |

@@ -1,6 +1,6 @@
 ---
 title: Security model
-description: "How Pi Durable Platform isolates agents and teams, what it trusts, how secrets and keys are stored and rotated, and its known limits in v0.1.2."
+description: "How Pi Durable Platform isolates agents and teams, what it trusts, how secrets and keys are stored and rotated, and its known limits."
 ---
 
 ## One enforcement point
@@ -11,12 +11,14 @@ Apps and browsers reach agents **only through the platform**. It authenticates e
 
 - **Storage**: one schema and one database role per agent, in a database apart from the platform's. A role owns only its schema and has no rights elsewhere. See [Databases](/docs/operate/databases).
 - **Runtime**: one process (one pod) per running agent, non-root, read-only root filesystem, no capabilities, no Kubernetes service account token. `AGENTS_RUNTIME_CLASS` can add a sandboxing runtime such as gVisor.
-- **Single owner**: a runtime owns its agent through an advisory lock on its only database connection. A stale runtime that loses its connection loses its ability to write at the same moment its lock is released, so two runtimes never write one agent.
+- **Single owner**: an agent's owner is recorded in a table in the agent's **own schema**, tied to the database session of its runtime's only connection. A stale runtime that loses its connection loses its ability to write at the same moment its session ends, and a replacement takes over as soon as it does, so two runtimes never write one agent.
+
+  Because the record is in the agent's own schema, no other agent's role can write it, lock it, drop it, or read it: each gets "permission denied". That is why another agent's role can't block an agent from starting or take over its storage, which a database-wide advisory lock couldn't prevent: any role in the agents database could take another agent's lock key. A role can still see that other roles' sessions exist, and agents share the server's capacity, so a hostile agent could remain a noisy neighbour. See [Databases and roles](/docs/operate/databases#who-owns-an-agent).
 - **Network**: in proxy mode agents need no path but the platform's gateway and their database. See [Network isolation](/docs/operate/network-isolation).
 
 ## What it trusts
 
-Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own in v0.1.2; that needs stronger isolation first (see Known limits).
+Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own; that needs stronger isolation first (see Known limits).
 
 ## Teams and people
 
@@ -29,16 +31,32 @@ Agents run **templates**, not uploaded code: instructions, a model and MCP serve
 
 Sessions are cookies (`Secure` on https), lasting `SESSION_TTL`. Writes from the browser need the session's CSRF token and a same-origin `Origin`. Suspending a person ends their sessions.
 
+## Who may sign in, and for how long
+
+If `OIDC_ALLOWED_GROUPS` is set, the platform keeps asking the identity provider whether people are still in an allowed group, so removing someone from the group ends their access within a check interval instead of at some later sign-in. For a person it finds outside the group, or whom the provider no longer vouches for, the platform:
+
+- **ends their browser sessions** and **disconnects their connected apps**;
+- **stops their personal API keys from working**, without revoking them;
+- keeps their data, team memberships and agents.
+
+This is separate from **Suspend…**, which only an admin does: neither undoes the other. The person comes back by signing in again once the provider lists them in an allowed group. Each denial and each restoration is in the audit log. It needs the provider to issue refresh tokens: see [Re-checking groups](/docs/operate/oidc#re-checking-groups) for what to set, what the grace period is, and what isn't covered.
+
+## Thread MCP servers have a known creator
+
+An app can give a thread its own MCP servers. They belong to a thread whose creator the platform knows. Setting servers on a thread ID that has no record **starts the thread**, the caller being its creator, as its first message would. A thread's servers are never kept without a thread. So nobody can leave servers on an ID for someone else's later private thread to inherit, which a client-chosen thread ID allowed before. Whoever uses an ID later gets the normal rules of the thread they find: a shared thread they may join, or a private thread that answers `404 thread_not_found`. See [Thread MCP servers](/docs/build/thread-mcp-servers).
+
+Threads that the platform names itself, with an unguessable ID (`POST /v1/agents/{id}/threads`), can't be guessed or pre-empted at all. See [Threads, messages and events](/docs/build/threads-and-messages#start-a-thread).
+
 ## Secrets and keys
 
-- **Provider keys, MCP headers and apps' thread MCP headers** are encrypted with `ENCRYPTION_KEY` and never returned by the API. Agents get provider keys only for direct-mode providers and the platform's default model; in proxy mode the gateway adds them.
+- **Provider keys, MCP headers, apps' thread MCP headers, and each agent's database password and runtime token** are encrypted with `ENCRYPTION_KEY` and never returned by the API. Agents get provider keys only for direct-mode providers and the platform's default model; in proxy mode the gateway adds them.
 - **API keys, service account keys and OAuth tokens** are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`. They are shown once, never logged.
 - **Runtime tokens and database passwords** reach Kubernetes runtimes through a per-agent Secret, never the pod spec; with a warm pool, through the activation request, stored nowhere in Kubernetes.
 
 ### Rotating keys
 
 - **`API_KEY_PEPPER`**: set the new value, and the old one as `API_KEY_PEPPER_PREVIOUS`. Keys made with the old pepper keep working and are re-digested on their next use (`*.pepper_rehash` in the audit log). `doctor` counts keys still on the old pepper. After 2 to 4 weeks, remove `API_KEY_PEPPER_PREVIOUS`; keys not used by then stop working.
-- **`ENCRYPTION_KEY`**: set the new value, and the old one as `ENCRYPTION_KEY_PREVIOUS`; values sealed with the old key still decrypt. Keep the old key until the stored secrets (provider keys, MCP headers) have been entered again.
+- **`ENCRYPTION_KEY`**: set the new value, and the old one as `ENCRYPTION_KEY_PREVIOUS`; restart; run `pi-durable-platform rekey` to re-seal every stored secret under the new key; check `doctor`; then remove the old key. See [Rotating keys](/docs/operate/key-rotation) for the steps and for what `rekey` doesn't cover.
 - **The warm pool's activation token**: see [Agent Sandbox](/docs/operate/agent-sandbox#rotating-the-activation-token).
 
 ## Addresses others choose
@@ -47,11 +65,12 @@ Teams' own providers and MCP servers, apps' metadata documents and apps' MCP ser
 
 ## Known limits
 
-- **Advisory locks are database-wide**: any role in the agents database could take another agent's lock key and stop it from starting. Acceptable for reviewed templates; uploaded agents would need a storage proxy instead of database credentials.
+- **Agents share the database server**: every agent role can see that other roles' sessions exist, and there are no per-role quotas beyond a connection limit. Cross-agent interference with ownership is closed, but uploaded agents would still need a storage proxy instead of database credentials, or hostile-code isolation.
+- **A compatibility lock stays for now**: runtimes also take the older release's advisory lock while any older runtime may still run. It is for rolling upgrades and is to be removed later.
 - **No hostile-code isolation yet**: running teams' own code needs sandboxed runtimes (gVisor or Kata) first.
 - **Shared agent tools**: every thread of an agent uses the same MCP credentials. Private threads hide conversations, not what an MCP server stores.
-- **Thread IDs are chosen by clients**: anyone who may use an agent can set the MCP servers of a thread that doesn't exist yet, which a later private thread with that ID would inherit. Use random thread IDs.
-- **Sign-in rules apply at sign-in**: removing someone from an allowed group doesn't end their sessions, keys or connected apps. Suspend them instead.
-- **Database roles are server-wide**: agent roles outlive a dropped agents database.
+- **Client-chosen thread IDs can be guessed if the client picks guessable ones**: whoever uses an ID first starts that thread. A shared thread can then be joined by anyone who may use the agent, and a private one is `404` for everyone else. Use `POST /v1/agents/{id}/threads`, or random IDs.
+- **Group re-checks have gaps**: the bootstrap admin and development personas are never re-checked, and people whose provider issued no refresh token are checked only when they sign in. See [Re-checking groups](/docs/operate/oidc#what-isnt-covered).
+- **Database roles are server-wide**: agent roles outlive a dropped agents database. `doctor` lists them and `prune-roles` drops them.
 
-Each of these is planned on the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) (the agents database hardening, platform-chosen thread IDs and re-checking group membership in v0.2; stronger sandboxing later), with an issue labelled `roadmap`.
+Stronger sandboxing, to run teams' own code, is planned on the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md).

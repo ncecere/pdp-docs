@@ -29,13 +29,30 @@ With a message:
 or on their own:
 
 ```sh
-PUT /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # [{name, url, headers?, expiresInSeconds?}], replaces them
+PUT /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # {servers: [{name, url, headers?, expiresInSeconds?}], visibility?}, replaces them
 GET /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # name, slug, url and expiry, never headers
 ```
 
 - Up to 10 servers. Each `name` (up to 100 characters) is shown to the model and names the tools: `mcpc__<slug>__<tool>`.
 - `headers` are encrypted and kept until the server expires: a day by default, at most a week (`expiresInSeconds`). They are never returned and never forwarded in the message.
 - Sending a list replaces the thread's servers; `[]` removes them.
+- The servers go with the thread: deleting the thread deletes them.
+
+## Whose thread it is
+
+A thread's servers always belong to a thread whose creator the platform knows. So giving servers to a thread ID that has no thread **starts the thread**, and you are its creator, exactly as sending its first message would. The `visibility` in the `PUT` body (`shared` by default, or `private`) is used only for this: send it before the first message when the thread is to be private. Starting a thread this way, like starting one with `POST /v1/agents/{agentId}/threads`, leaves it **reserved** until a message is accepted: only you see it in lists. A reserved thread that nobody sends to is removed after 30 days, with its servers.
+
+When the thread already exists, you must be allowed on it:
+
+| The thread | A request from you |
+|---|---|
+| Yours, or shared | Works. Anyone who may use the agent can read and change a shared thread's servers, and sees their names and URLs, never the headers |
+| Someone else's, private | `404 thread_not_found`, as on every thread route |
+| Any, with a `visibility` different from its own | `409 visibility_fixed` |
+
+An empty list for an ID with no thread changes nothing and starts nothing. A request with servers the platform refuses (a host that isn't allowed, or a template that doesn't allow them) starts nothing either.
+
+Reading a thread's servers takes the same access as reading the thread.
 
 ## How the agent uses them
 
@@ -45,5 +62,5 @@ Before each message, the runtime fetches the thread's servers from the platform,
 
 ## Things to know
 
-- Anyone who may use an agent can set the servers of a thread ID that doesn't exist yet, and a later private thread with that ID inherits them. Use random thread IDs.
+- Servers are never kept for a thread that doesn't exist, so nobody can leave servers on an ID for someone else's later private thread to inherit. Whoever uses an ID later gets the rules of the thread they find. Start your threads with `POST /v1/agents/{agentId}/threads` (see [Start a thread](/docs/build/threads-and-messages#start-a-thread)): the ID can't be guessed, so no one else can start the thread first.
 - These servers are separate from the MCP servers a template gives every thread of an agent ([Team MCP servers](/docs/teams/mcp-servers)).
