@@ -65,7 +65,7 @@ While runtimes of an older release may still run (an old pod during a rollout, o
 
 ### Size
 
-Each agent's schema holds about 25 tables and indexes. That's fine for thousands of agents. Count connections: one per running agent, plus the platform's pools.
+Each agent's schema holds about 25 tables and indexes. That's fine for thousands of agents. Count connections: one per running agent, plus the platform's pools. Each platform replica also holds a connection that listens for thread events and takes short-lived ones for its locks: see [Running several replicas](/docs/operate/replicas#postgresql-connections).
 
 ## Clean-up
 

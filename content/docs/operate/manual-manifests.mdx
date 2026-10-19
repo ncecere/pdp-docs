@@ -127,10 +127,11 @@ spec:
 
 Notes:
 
-- **One replica.** The platform supports one replica. Use `strategy: {type: Recreate}` on the Deployment, as the chart does, so the old pod is gone before the new one starts. Rate limits, thread events and OAuth state go through PostgreSQL, but the idle reaper only knows the event streams open on its own replica, and several replicas haven't been tested.
+- **Replicas.** The example has one replica. With one, use `strategy: {type: Recreate}` on the Deployment, as the chart does, so the old pod is gone before the new one starts. The platform also runs as several replicas, with the `kubernetes` or `agent-sandbox` launcher: set `replicas: 2`, use `strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}` so there is always a ready replica, spread the pods over nodes, and add a PodDisruptionBudget. See [Running several replicas](/docs/operate/replicas).
+- **Metrics** are off unless you set `METRICS_ADDR`, for example `:9090`, and add a container port for it. The port has no authentication: don't put it in the Service the Ingress routes to, and let only your scraper reach it. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
 - **`AGENTS_GATEWAY_ADDR`** defaults to `127.0.0.1:8099`, which agent pods can't reach: listen on `:8099` and set **`AGENTS_GATEWAY_URL`** to the address agents use, the Service's name and gateway port.
 - **Migrations**: with `MIGRATE_ON_START=true` the platform applies them at start. Otherwise run `pi-durable-platform migrate` (for example as a Job with the same image and `args: [migrate]`) before rolling out; a platform whose database is behind refuses to start. See [Upgrades and migrations](/docs/operate/upgrades).
-- **Shutdown**: on SIGTERM the platform fails readiness, waits `SHUTDOWN_DELAY` (5 s), then gives requests `SHUTDOWN_TIMEOUT` (60 s). Make `terminationGracePeriodSeconds` longer than both. Open event streams end then; clients reconnect.
+- **Shutdown**: on SIGTERM the platform fails readiness, waits `SHUTDOWN_DELAY` (5 s), then gives requests and event streams `SHUTDOWN_TIMEOUT` (60 s). Make `terminationGracePeriodSeconds` at least the two together (the example's 75 s, as in the chart). Open event streams end then; clients reconnect.
 - **The image has no shell.** Run checks with `kubectl exec deploy/pi-durable-platform -- /pi-durable-platform doctor`.
 
 ## 7. Ingress

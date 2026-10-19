@@ -7,7 +7,7 @@ Two keys protect what the platform's database holds. They rotate differently.
 
 | Key | Protects | How it rotates |
 |---|---|---|
-| `ENCRYPTION_KEY` | Secrets the platform must use again: model provider keys and headers, MCP server headers, apps' thread MCP headers, and each agent's database password and runtime token. They are sealed with AES-256-GCM | `pi-durable-platform rekey` re-seals them under the new key |
+| `ENCRYPTION_KEY` | Secrets the platform must use again: model provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, and the identity provider refresh tokens kept for [group re-checks](/docs/operate/oidc#re-checking-groups). They are sealed with AES-256-GCM | `pi-durable-platform rekey` re-seals them under the new key |
 | `API_KEY_PEPPER` | The digests of API keys, service account keys and OAuth Connect tokens and codes. Digests can't be reversed | Each moves to the new pepper the next time it is used |
 
 Both keys are 32 random bytes in base64: `openssl rand -base64 32`.
@@ -40,8 +40,9 @@ model_providers.api_key_enc               0         3           0
 model_providers.headers_enc               0         2           0
 mcp_servers.headers_enc                   0         4           0
 thread_mcp_servers.headers_enc            0         1           0
+user_idp_tokens.refresh_token_enc         0        40           0
 
-dry run: 0 value(s) under ENCRYPTION_KEY, 34 under the previous key (a run would re-seal them), 0 unreadable
+dry run: 0 value(s) under ENCRYPTION_KEY, 74 under the previous key (a run would re-seal them), 0 unreadable
 ```
 
 (The counts here are an example.) An **unreadable** value opens with neither key: a missing `ENCRYPTION_KEY_PREVIOUS`, a third key, or damage. Fix that before you go on.
@@ -75,8 +76,10 @@ It works column by column, in batches of rows (`--batch`, 200 by default, up to 
 - **It re-seals values in the platform's database only.** It doesn't touch Kubernetes Secrets.
 - **Backups keep the old key's values.** A backup of the platform database taken before `rekey` has its values under the old key. Keep the old key as long as you may restore from such a backup, as you keep `ENCRYPTION_KEY` itself (see [Backups](/docs/operate/backups)).
 
-<Callout type="warn" title="Identity provider refresh tokens are not re-sealed">
-With [group re-checks](/docs/operate/oidc#re-checking-groups), the platform keeps each person's identity provider refresh token, sealed with `ENCRYPTION_KEY`. `rekey` and `doctor` don't cover these tokens. Once you remove `ENCRYPTION_KEY_PREVIOUS`, the platform can't open a token sealed under the old key: it logs an error each time it tries and doesn't re-check that person until they sign in again, which stores a new token. Until then they keep the access they had. If you rely on group re-checks, keep `ENCRYPTION_KEY_PREVIOUS` until people have signed in again, or for as long as it suits you.
+- **It covers the identity provider refresh tokens too.** With [group re-checks](/docs/operate/oidc#re-checking-groups), the platform keeps each person's refresh token, sealed with `ENCRYPTION_KEY` (the table `user_idp_tokens`). `rekey` and `doctor` count and re-seal them with the rest, so group re-checks keep working after you remove `ENCRYPTION_KEY_PREVIOUS`, once `rekey` has run. The product's tests fail if any sealed column is missing from `rekey`.
+
+<Callout type="warn" title="Run rekey before you remove the previous key">
+If you remove `ENCRYPTION_KEY_PREVIOUS` while refresh tokens are still sealed under it, the platform can't open them. It logs an error each time it tries and doesn't re-check that person until they sign in again, which stores a new token. Until then they keep the access they had. `doctor` warns about values still under the previous key, so follow its advice and run `rekey` first.
 </Callout>
 
 ### If you lose the key

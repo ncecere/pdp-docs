@@ -33,7 +33,7 @@ The secret settings are `DATABASE_URL`, `AGENTS_DATABASE_URL`, `ENCRYPTION_KEY`,
 | `LOG_FORMAT` | `json` | `json` or `text` |
 | `TRUSTED_PROXIES` | none | Comma-separated CIDRs of your ingress, allowed to set `X-Forwarded-For` |
 | `SHUTDOWN_DELAY` | `5s` | After SIGTERM, how long readiness fails before the server stops taking requests (0 to 5m) |
-| `SHUTDOWN_TIMEOUT` | `60s` | How long in-flight requests get to finish (1s to 30m) |
+| `SHUTDOWN_TIMEOUT` | `60s` | How long in-flight requests and event streams get to finish (1s to 30m). A pod's `terminationGracePeriodSeconds` must cover `SHUTDOWN_DELAY` and this together |
 
 ## Instance identity
 
@@ -53,7 +53,7 @@ The secret settings are `DATABASE_URL`, `AGENTS_DATABASE_URL`, `ENCRYPTION_KEY`,
 | `OIDC_ISSUER` | none | Your identity provider's issuer URL. Empty disables single sign-on. |
 | `OIDC_CLIENT_ID` | none | Required with `OIDC_ISSUER` |
 | `OIDC_CLIENT_SECRET` | none (secret) | Required with `OIDC_ISSUER` |
-| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid`. Add `offline_access` to [re-check groups](/docs/operate/oidc#re-checking-groups) while people are signed in |
+| `OIDC_SCOPES` | `openid,profile,email` | Must include `openid`. Add `offline_access` to [re-check groups](/docs/operate/oidc#re-checking-groups) while people are signed in; your identity provider must issue refresh tokens for it. The Helm chart adds it when `oidc.allowedGroups` is set |
 | `OIDC_EMAIL_CLAIM` | `email` | The claim holding the email address |
 | `OIDC_GROUPS_CLAIM` | `groups` | The claim holding the person's groups; empty stores none |
 | `OIDC_REQUIRE_VERIFIED_EMAIL` | `true` | Refuse sign-in unless `email_verified` is true |
@@ -73,7 +73,7 @@ See [OIDC sign-in](/docs/operate/oidc).
 
 | Variable | Default | |
 |---|---|---|
-| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys and headers, MCP server headers, apps' thread MCP headers, and each agent's database password and runtime token. |
+| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, and the identity provider refresh tokens kept for group re-checks. |
 | `ENCRYPTION_KEY_PREVIOUS` | none (secret) | The key being rotated away from; still accepted for reads until `pi-durable-platform rekey` has re-sealed every value |
 | `API_KEY_PEPPER` | none, required (secret) | 32 bytes, base64. The HMAC key under which API keys, service account keys and OAuth tokens are stored as digests. |
 | `API_KEY_PEPPER_PREVIOUS` | none (secret) | The pepper being rotated away from. Keys made with it keep working and are re-digested on use. Remove it after 2 to 4 weeks. |
@@ -108,6 +108,17 @@ See [Rotating keys](/docs/operate/key-rotation).
 | `AGENTS_MODEL_REASONING` | `false` | Whether the default model reasons |
 
 The default model is for templates and agents that don't choose one from the model catalog. Its key is given to the agents that use it.
+
+## Observability
+
+| Variable | Default | |
+|---|---|---|
+| `METRICS_ADDR` | none: off | Where a listener that serves Prometheus metrics at `/metrics`, and nothing else, listens: `host:port` or `:port`, such as `:9090`. It has no authentication, so bind it privately and never route an Ingress to it. It can't be the same as `LISTEN_ADDR` or `AGENTS_GATEWAY_ADDR`. The Helm chart sets `:9090` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none: tracing is off | The base URL of an OpenTelemetry collector that takes OTLP over HTTP (port 4318, not gRPC), such as `http://otel-collector:4318`. Must be an `http` or `https` URL |
+| `OTEL_SERVICE_NAME` | `pi-durable-platform` | The `service.name` of the spans |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of new traces kept, from 0 to 1 |
+
+The trace exporter also reads the standard OpenTelemetry variables for its headers, timeout, compression and TLS (`OTEL_EXPORTER_OTLP_HEADERS` and the others). Set those in the process environment, from a Secret. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
 
 ## Production safety checks
 

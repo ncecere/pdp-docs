@@ -51,6 +51,7 @@ The platform shows `logo_uri` (from a document or a registration) on the approva
 - PNG, JPEG, GIF or WebP, verified by their bytes. **No SVG.** A file that isn't what its bytes say is refused.
 - Cached for an hour, so a new logo can take that long to appear.
 - If the logo can't be loaded or isn't acceptable, the pages show your app's initials.
+- With [several platform replicas](/docs/operate/replicas), each caches your document and logo on its own. The approval page loads the logo in a second request, which may reach a replica that hasn't fetched your document yet, so on some requests the page shows your app's initials instead.
 
 ### Dynamic Client Registration
 

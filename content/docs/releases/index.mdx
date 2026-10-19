@@ -28,6 +28,7 @@ The [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/road
 |---|---|---|
 | v0.2 | Run it anywhere, safely | Deployment manifests (Kustomize and a Helm chart with RBAC and NetworkPolicies), several platform replicas, metrics and tracing, a `rekey` command, platform-chosen thread IDs, re-checking IdP group membership, a hardened agents database, a complete configuration reference |
 | v0.3 | Apps at scale | Paging and search for threads, incremental event streams, steering, idempotent agent creation, OAuth Connect for apps with many people, moving agents between teams, usage for several agents at once |
-| v0.4 | Agents that do more | Files and images on S3-compatible storage, scheduled wake-ups, tool approvals, runtime resources per template version |
-| v0.5 | Budgets and limits | Enforced monthly budgets, limits for shared teams |
+| v0.4 | Agents that run on their own | The runtime as a library, so teams can build agents with their own documents, hooks and tasks; triggers (schedules and webhooks) that wake agents and start runs; hibernation that knows about background work; a first-party triage agent and deep-research agent; tool approvals |
+| v0.5 | Files, memory and limits | Files and images on S3-compatible storage, runtime resources per template version, enforced monthly budgets, limits for shared teams, an assistant with memory, agent runtimes registered by platform admins |
+| v0.6 | Coding agents | Workspaces with files and a shell |
 | Later | | A Docker Compose deployment without Kubernetes, stronger sandboxing (gVisor or Kata) |

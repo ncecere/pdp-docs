@@ -9,17 +9,18 @@ Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
 
 ## What the chart deploys
 
-- **The platform**: one Deployment, with a Service for the web app and API (port 80, to 8098) and a separate Service for the gateway agents call for models (8099). It runs as a non-root user, with a read-only root filesystem, no capabilities and the default seccomp profile.
+- **The platform**: one Deployment (one replica by default; [two are supported](/docs/operate/replicas)), with a Service for the web app and API (port 80, to 8098) and a separate Service for the gateway agents call for models (8099). It runs as a non-root user, with a read-only root filesystem, no capabilities and the default seccomp profile.
+- **Metrics**: a port named `metrics` (9090) and a Service `<release>-metrics` for it, which no NetworkPolicy lets anyone reach until you name your scraper. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
 - **The agents namespace** (`pi-durable-agents` by default), with the `restricted` Pod Security level. Agent pods, or Agent Sandbox runtimes, run here and nothing else does.
 - **Permissions**: a ServiceAccount for the platform, and a Role and RoleBinding **in the agents namespace only**, with exactly the verbs the launcher uses. Nothing is cluster-wide.
 - **NetworkPolicies**: see [Network policies](#network-policies).
-- Optionally an Ingress, a PodDisruptionBudget and a ResourceQuota for the agents namespace.
+- Optionally an Ingress, a PodDisruptionBudget, a ServiceMonitor, a Grafana dashboard ConfigMap and a ResourceQuota for the agents namespace.
 - With `agent-sandbox` and a warm pool, a SandboxTemplate and a SandboxWarmPool.
 
 The chart does **not** install PostgreSQL, your ingress controller, TLS certificates or DNS, or Agent Sandbox's controller.
 
-<Callout type="info" title="One replica">
-The platform runs as one replica. The chart's schema refuses a larger `replicaCount`: the idle reaper only knows the event streams open on its own process. The Deployment replaces its pod instead of rolling it, so an upgrade has a short outage.
+<Callout type="info" title="One replica, or two">
+The chart's default is one replica. The Deployment then replaces its pod instead of rolling it, so every change has a short outage. Set `replicaCount: 2` and `podDisruptionBudget.enabled: true` to stay up through node drains and rollouts: see [Running several replicas](/docs/operate/replicas).
 </Callout>
 
 ## Before you install
@@ -86,6 +87,8 @@ networkPolicy:
           matchLabels:
             kubernetes.io/metadata.name: ingress-nginx
 ```
+
+With `oidc.allowedGroups` set, the chart adds the `offline_access` scope to `OIDC_SCOPES` for you, because the platform needs each person's refresh token to [re-check their groups](/docs/operate/oidc#re-checking-groups) while they are signed in. **Your identity provider must issue refresh tokens for that scope to this client.** The chart leaves `offline_access` out only if you turn the re-check off with `oidc.groupRecheckInterval: "0"` (a string). `groupRecheckInterval` and `groupRecheckGrace` are strings such as `"30m"` and `"24h"`; left empty, the platform's defaults apply (15 minutes and 24 hours).
 
 With the standard NetworkPolicy flavour, the platform can reach the Kubernetes API only by address, because a standard policy can't name it. Find it:
 
@@ -156,15 +159,18 @@ The Role the chart creates has the verbs of the launcher you choose:
 | `appUrl` | Required: the public origin |
 | `images.platform`, `images.runtime` (`tag`, `digest`) | The default tag is `v<appVersion>`; pin by digest |
 | `secrets.name`, and a `{name, key}` for each setting | Where the database URLs, the two keys and the OIDC secret are read |
-| `oidc.*` | Issuer, client ID, claims, `scopes`, `allowedGroups`, `allowedEmailDomains`, `bootstrapAdminSubject` |
+| `oidc.*` | Issuer, client ID, claims, `scopes`, `allowedGroups`, `allowedEmailDomains`, `bootstrapAdminSubject`, and `groupRecheckInterval` and `groupRecheckGrace` (strings). With `allowedGroups`, the chart adds the `offline_access` scope: see [Re-checking groups](/docs/operate/oidc#re-checking-groups) |
 | `agents.*` | Namespace, launcher, idle timeout, runtime class, pull Secret, database host for runtimes, default model, apps' MCP hosts, quota |
 | `agentSandbox.*` | Warm pool on or off and its size, names, runtime resources |
 | `ingress.*` | Class, host (default: the host of `appUrl`), path, TLS, annotations |
 | `networkPolicy.*` | See [Network policies](#network-policies) |
 | `resources`, `podSecurityContext`, `securityContext` | Defaults are restricted: non-root, read-only root filesystem, no capabilities, seccomp |
-| `terminationGracePeriodSeconds` | 30 by default. The platform waits `SHUTDOWN_DELAY` (5 s) and then gives requests `SHUTDOWN_TIMEOUT` (60 s) to finish, so raise it, to 75 for example, if you want them the full time |
-| `replicaCount` | 1: the schema refuses more |
-| `podDisruptionBudget.*` | Off by default: with one replica, a budget of `minAvailable: 1` blocks node drains |
+| `terminationGracePeriodSeconds` | 75 by default. The platform waits `SHUTDOWN_DELAY` (5 s) and then gives requests and event streams `SHUTDOWN_TIMEOUT` (60 s) to finish, and the pod needs both. If you raise either setting, raise this too |
+| `replicaCount` | 1 by default; 2 is the supported setup for staying up. See [Running several replicas](/docs/operate/replicas) |
+| `podDisruptionBudget.*` | Off by default: with one replica, a budget of `minAvailable: 1` blocks node drains. Turn it on with two replicas |
+| `affinity`, `topologySpreadConstraints` | When set, they replace the spreading defaults that more than one replica gets |
+| `metrics.*` | `enabled` (on by default), `port` (9090), `serviceMonitor.*` (for the Prometheus Operator) and `dashboard.*` (the Grafana dashboard as a ConfigMap, off by default). See [Metrics and tracing](/docs/operate/metrics-and-tracing) |
+| `tracing.*` | `otlpEndpoint` (an OTLP/HTTP collector's base URL; empty means no tracing), `serviceName`, `sampleRatio` |
 | `config`, `extraEnv`, `extraEnvFrom`, `extraVolumes` | Any other [setting](/docs/operate/configuration) of the platform, for example `config: {OIDC_GROUP_RECHECK_INTERVAL: 30m}` |
 
 The ConfigMap holds every non-secret setting. The pod restarts when it changes (`rolloutOnConfigChange`).
@@ -185,6 +191,8 @@ The policies are what isolates agents. They need a CNI that enforces them.
 | `database` | Required: PostgreSQL's pods (`podLabels`, in `namespace`, by default the release's) and/or external `cidrs`, and `port`. The platform and agent pods may reach them. PostgreSQL's own pods need ingress from both: if your namespace denies by default, allow it |
 | `ingress.from` | Who may reach the web port. The default is every namespace: narrow it to your ingress controller's |
 | `egress.publicHttps` | Public HTTPS egress for the platform, with the private ranges excluded |
+| `metrics.from` | Who may reach the metrics port (9090), written as NetworkPolicy `from` peers. The default is nobody: no rule is created, so nothing can scrape the port until you name your scraper |
+| `egress.tracing` | Where the tracing collector is (`to`, and `ports`, 4318 by default), when it is in the cluster or on a private address |
 | `egress.extra`, `agents.extraEgress` | More egress rules for the platform pods and for agent pods, for direct-mode providers and MCP servers on addresses agents otherwise can't reach |
 
 `networkPolicy.enabled: false` removes every policy, and agents are then **not isolated**. Only do that where something else enforces the same rules.
@@ -195,11 +203,11 @@ See [Network isolation](/docs/operate/network-isolation) for the connections eac
 
 A cluster whose CNI ignores NetworkPolicy accepts the objects and enforces nothing. Check, as the repository's smoke test does: from an agent pod, a connection that should be refused must be refused.
 
-The smoke test (`deploy/scripts/smoke-kind.sh`) installs the chart into a kind cluster, whose default CNI, kindnet, enforces NetworkPolicy. It checks that `doctor` passes, that the launcher has the rights it needs and no more, that an agent answers a message and hibernates and wakes, and that from an agent pod only the database and the gateway are reachable (not the web port, the Kubernetes API, the internet or another agent) and that a pod outside the platform can't reach an agent. Continuous integration runs it for every change to `deploy/`. It pulls the released images the chart names, so it tests the chart, not the platform's code.
+The smoke test (`deploy/scripts/smoke-kind.sh`) installs the chart into a kind cluster, whose default CNI, kindnet, enforces NetworkPolicy. It checks that `doctor` passes, that the launcher has the rights it needs and no more, that an agent answers a message and hibernates and wakes, and that from an agent pod only the database and the gateway are reachable (not the web port, the Kubernetes API, the internet or another agent) and that a pod outside the platform can't reach an agent. It installs **two replicas** and checks that a session, an agent and its conversation are shared between them. Continuous integration runs it for every change to `deploy/`, with the images built for that commit. Run by hand, it installs the images the chart names unless you give it others.
 
 ## Upgrading
 
-Set the new chart version, and the new release's digests, and run `helm upgrade`. The platform applies its migrations at start (`migrateOnStart`, on by default). The single replica is replaced, not rolled, so there is a short outage. A warm pool replaces its standby runtimes at once. Agents that are running move to the new runtime image when they next wake. See [Upgrades and migrations](/docs/operate/upgrades).
+Set the new chart version, and the new release's digests, and run `helm upgrade`. The platform applies its migrations at start (`migrateOnStart`, on by default). A single replica is replaced, not rolled, so there is a short outage. Several replicas roll one at a time with none missing, so both versions run for a while. A warm pool replaces its standby runtimes at once. Agents that are running move to the new runtime image when they next wake. See [Upgrades and migrations](/docs/operate/upgrades).
 
 ## Uninstalling
 
@@ -210,5 +218,5 @@ Set the new chart version, and the new release's digests, and run `helm upgrade`
 - PostgreSQL, and its backups.
 - The ingress controller, TLS certificates and DNS.
 - Agent Sandbox's controller and CRDs.
-- Several replicas, and metrics.
+- Prometheus, Grafana and a tracing backend. The chart ships what they need: see [Metrics and tracing](/docs/operate/metrics-and-tracing).
 - Direct-mode providers and MCP servers on private addresses: agents reach only the database, the gateway and DNS. Give them more with `networkPolicy.agents.extraEgress`, and the platform with `networkPolicy.egress.extra`.

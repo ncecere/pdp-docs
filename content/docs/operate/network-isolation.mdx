@@ -15,6 +15,8 @@ Pi Durable Platform is built so that agents need almost no network: in proxy mod
 | Platform, agent runtimes | PostgreSQL | 5432 | The platform: both databases. Runtimes: the agents database only |
 | Platform | Kubernetes API | 443/6443 | Starting and stopping runtimes |
 | Platform | Identity provider, model providers, MCP servers, apps' metadata documents | 443 | Sign-in, proxying, reading tools, OAuth Connect |
+| Your metrics scraper | Platform | 9090 | Prometheus metrics (`METRICS_ADDR`), only if you turn them on. No authentication: allow your scraper only |
+| Platform | Tracing collector | 4318 | OpenTelemetry traces, only if you set `OTEL_EXPORTER_OTLP_ENDPOINT`. The chart's public HTTPS egress covers a collector on a public address and port 443; one in the cluster, on a private address or on another port needs a rule of its own (`networkPolicy.egress.tracing`) |
 | Agent runtimes | Direct-mode providers and MCP servers | 443 | Only if you use direct mode |
 | Everything | DNS | 53 | |
 

@@ -49,20 +49,20 @@ With `OIDC_ALLOWED_GROUPS`, the platform keeps asking your identity provider whe
 
 ### What your provider must provide
 
-1. **A refresh token for this client.** Add `offline_access` to `OIDC_SCOPES`, and let the provider issue refresh tokens for this client:
+1. **A refresh token for this client.** The platform asks for the `offline_access` scope, and **your provider must issue refresh tokens for it to this client**:
 
    ```sh
    OIDC_SCOPES=openid,profile,email,offline_access
    ```
 
-   Some providers need the scope enabled as well: for example, a scope mapping for `offline_access` attached to the provider that serves this client. Check your provider's documentation. With the Helm chart, set `oidc.scopes`.
+   Some providers need the scope enabled as well: for example, a scope mapping for `offline_access` attached to the provider that serves this client. Check your provider's documentation. Where you set `OIDC_SCOPES` yourself (the platform on its own, or Kustomize: the production example sets it), add `offline_access` there. **The Helm chart adds it for you** when `oidc.allowedGroups` is set, unless you turn the re-check off with `oidc.groupRecheckInterval: "0"` (a string).
 2. **The groups claim** (`OIDC_GROUPS_CLAIM`) in the ID token that a refresh returns, or else in the userinfo answer.
 
 With `OIDC_ALLOWED_GROUPS` set but no `offline_access`, the platform logs a warning at start: without a refresh token, groups apply at sign-in only.
 
 ### How it works
 
-At sign-in the platform keeps the person's refresh token, sealed with `ENCRYPTION_KEY`. Every `OIDC_GROUP_RECHECK_INTERVAL` (15 minutes by default) it exchanges the token at your provider's token endpoint for fresh claims, takes the groups from them, and applies the same rule as at sign-in. If your provider rotates the refresh token, the new one replaces the kept one. It checks people who were recently active: a sign-in, a live session, or an API key or connected app used in the last 30 days. A removal takes effect within the interval plus up to a minute. Set `OIDC_GROUP_RECHECK_INTERVAL=0` to turn the re-check off.
+At sign-in the platform keeps the person's refresh token, sealed with `ENCRYPTION_KEY`. Every `OIDC_GROUP_RECHECK_INTERVAL` (15 minutes by default) it exchanges the token at your provider's token endpoint for fresh claims, takes the groups from them, and applies the same rule as at sign-in. If your provider rotates the refresh token, the new one replaces the kept one. It checks people who were recently active: a sign-in, a live session, or an API key or connected app used in the last 30 days. A removal takes effect within the interval plus up to a minute. Set `OIDC_GROUP_RECHECK_INTERVAL=0` to turn the re-check off (with the chart, `oidc.groupRecheckInterval: "0"`; `oidc.groupRecheckGrace` sets the grace period; both are strings).
 
 | The provider's answer | What happens |
 |---|---|
@@ -95,7 +95,7 @@ Signing in applies the rule again. When it passes, the block is lifted (**Restor
 - The bootstrap admin and development personas are never re-checked.
 - People who signed in before the check existed, or when your provider issued no refresh token, have nothing to check with: their groups apply when they next sign in.
 - A provider that lets refresh tokens expire for good (an absolute lifetime) ends access with the "no longer vouches" reason when that happens. The person signs in again.
-- Stored refresh tokens that were sealed under a previous `ENCRYPTION_KEY` aren't re-sealed by `rekey`: see [Rotating keys](/docs/operate/key-rotation#what-rekey-does-and-doesnt-do).
+- The stored refresh tokens are sealed with `ENCRYPTION_KEY`. `rekey` and `doctor` cover them: after a [key rotation](/docs/operate/key-rotation#what-rekey-does-and-doesnt-do), run `rekey` before you drop the previous key, and group re-checks keep working.
 
 To cut someone off at once, whatever the interval, **Suspend…** them in **Admin › Users**: that ends their sessions and stops their keys and apps at the next request.
 

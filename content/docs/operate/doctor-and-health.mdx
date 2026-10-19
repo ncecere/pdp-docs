@@ -24,7 +24,7 @@ Each check ends as **ok**, **info** (worth knowing), **warn** (something to do, 
 | `keys pepper` | Every usable key, service account key and app token is under `API_KEY_PEPPER` | **Info** while some are on `API_KEY_PEPPER_PREVIOUS` (they move when used), or on a pepper no longer configured (those no longer work: revoke them). **Info** too when none is left on the previous pepper: you can remove it |
 | `keys encryption` | Every stored secret is sealed with `ENCRYPTION_KEY` | **Warn** while any value is still sealed with `ENCRYPTION_KEY_PREVIOUS`, naming the columns and counts: run `rekey`, then remove the previous key. **Fail** when a value is sealed with neither key, since the platform can't read it. **Info** when none is under the previous key and `ENCRYPTION_KEY_PREVIOUS` can go |
 
-The `keys encryption` check reads only the key IDs stored with the values, and opens nothing. See [Rotating keys](/docs/operate/key-rotation).
+The `keys encryption` check covers every sealed column that [`rekey`](/docs/operate/key-rotation) knows, including the identity provider refresh tokens that [group re-checks](/docs/operate/oidc#re-checking-groups) keep (`user_idp_tokens`). It reads only the key IDs stored with the values, and opens nothing. See [Rotating keys](/docs/operate/key-rotation).
 
 ## The agents database checks
 
@@ -71,13 +71,13 @@ kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-pl
 | `GET /healthz` | Liveness: the process is up |
 | `GET /readyz` | Readiness: both databases answer and the platform isn't shutting down |
 
-On SIGTERM `/readyz` fails first, for `SHUTDOWN_DELAY`, so load balancers stop sending traffic before the server stops.
+On SIGTERM `/readyz` fails first, for `SHUTDOWN_DELAY`, so load balancers stop sending traffic before the server stops. With several replicas, each one does this in turn during a rollout: see [Running several replicas](/docs/operate/replicas).
 
 ## Logs
 
 The platform logs to standard output, as JSON by default (`LOG_FORMAT`, `LOG_LEVEL`). Every response carries an `X-Request-ID` header; the same ID is in the logs and in audit entries, so you can follow one request. Secrets, keys and tokens are never logged.
 
-v0.1.2 has no metrics endpoint; metrics and tracing are planned for v0.2 on the [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md).
+The platform also exports Prometheus metrics, on a port of its own, and OpenTelemetry traces if you set a collector. When there is a trace, the access log carries its `trace_id`. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
 
 ## Common problems
 

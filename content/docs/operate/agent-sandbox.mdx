@@ -62,6 +62,8 @@ Set `AGENTS_SANDBOX_WARM_POOL` to the name of a `SandboxWarmPool` you create in 
 
 While a previous runtime is still letting go of the agent, activation answers `409 owned_elsewhere` and the platform retries. A runtime that restarts comes back in standby and is activated again on the next request.
 
+To size the pool, watch `pdp_warm_pool_claims_total` (a `hit` when a standby runtime was claimed, a `miss` when the pool was empty) and `pdp_agent_wake_duration_seconds`: see [Metrics and tracing](/docs/operate/metrics-and-tracing). With several platform replicas, an agent still gets one claim: starting it is serialised across replicas ([Running several replicas](/docs/operate/replicas#starting-an-agent)).
+
 The platform needs, in the agents' namespace:
 
 ```yaml
