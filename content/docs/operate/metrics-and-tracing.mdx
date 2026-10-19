@@ -182,7 +182,7 @@ networkPolicy:
 ### The spans
 
 - A **server span** for every request on the API and the gateway, named `METHOD route-pattern` (the pattern the metrics use, never the path), with the route, the status code and the request ID. The access log carries `trace_id` when there is a trace, so you can go from a log line to its trace.
-- `agent.wake` (the launcher, how it started, the result) and `agent.runtime_request` (the relay to the agent's runtime) below the request that woke the agent. The request to the runtime, and the warm pool's activation call, carry a `traceparent` header.
+- `agent.wake` (the launcher, how it started, the result and the agent's ID) and `agent.runtime_request` (the relay to the agent's runtime) below the request that woke the agent. The request to the runtime, and the warm pool's activation call, carry a `traceparent` header.
 - `model.upstream` (the provider kind, the platform model's name, the status and the tokens) and `mcp.upstream` (the server, and the number and names of the tools called) below the gateway request. The trace context is sent on to the provider or the MCP server.
 
 A request that arrives with a `traceparent` header is continued. `baggage` is neither read nor sent.
