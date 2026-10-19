@@ -71,6 +71,7 @@ Some addresses are chosen by people other than the operator, so the platform che
 
 - **Teams' own model providers and MCP servers**: `https`, a public address or one inside the **private networks** platform admins list in **Admin › Settings**; never loopback, link-local or cloud metadata addresses. The address is resolved and checked again at every connection and the connection is pinned to it, so DNS can't be changed to point it elsewhere later. Redirects and proxies from the environment aren't used.
 - **Apps' Client ID Metadata Documents** (OAuth Connect): public addresses only, no redirects, at most 16 KiB, 5 seconds.
+- **Apps' logos** (OAuth Connect, since v0.1.2): the platform fetches an app's published logo itself, from public addresses only, over `https`, without redirects, at most 256 KiB, and serves it from its own address so the console never loads an image from another site.
 - **Apps' MCP servers for a thread**: only hosts in `AGENTS_CLIENT_MCP_HOSTS` (none by default).
 
 Platform-level providers and MCP servers that admins add aren't guarded, so admins can point them at internal services. Your NetworkPolicies decide what the platform itself may reach.
