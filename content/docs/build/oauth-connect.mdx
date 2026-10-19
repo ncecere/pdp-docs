@@ -37,11 +37,20 @@ Publish a JSON document at an `https` URL with a path, on your app's site, and u
 
 - `client_id` must equal the document's URL exactly (at most 500 characters, no query or fragment).
 - `redirect_uris` are `https`, or `http` on a loopback host.
-- `client_uri` and `logo_uri` are optional and shown only when `https`.
+- `client_uri` and `logo_uri` are optional and shown only when `https`. The platform serves the logo itself; see [The logo](#the-logo).
 
 The platform's server fetches the document when someone starts a connection (not on token requests): from public addresses only, without redirects or proxies, within 5 seconds, at most 16 KiB, and it must answer `200` with `Content-Type: application/json`. Serve it exactly at that URL, with no sign-in or trailing-slash redirect in front. It is cached for its `Cache-Control: max-age`, between 1 minute and 1 hour (10 minutes without one; `no-store` or `no-cache` mean 1 minute), so a change applies when the cached copy expires.
 
 Its host vouches for the name, and platform admins can mark such an app **trusted** so people skip the approval page. Don't list loopback redirect URIs in a production document: a trusted app's ID with a local redirect would let any local program get a code without the person seeing a page.
+
+### The logo
+
+The platform shows `logo_uri` (from a document or a registration) on the approval screen, in **Connected apps** and on a person's page in **Admin › Users**, but it **proxies** it (since v0.1.2): the console's Content-Security-Policy allows images only from the platform, so the browser never loads your address. The platform fetches the logo itself, checks it and serves it from its own origin at `GET /v1/oauth/client-logo?client_id=…`, to signed-in people only. The address is always the one in your document or registration, never one from the request.
+
+- A public `https` address, with no redirects, and at most 256 KiB.
+- PNG, JPEG, GIF or WebP, verified by their bytes. **No SVG.** A file that isn't what its bytes say is refused.
+- Cached for an hour, so a new logo can take that long to appear.
+- If the logo can't be loaded or isn't acceptable, the pages show your app's initials.
 
 ### Dynamic Client Registration
 

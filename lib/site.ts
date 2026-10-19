@@ -19,11 +19,11 @@ export const gitConfig = {
 /** The product's repository. */
 export const productRepo = 'https://github.com/ncecere/pi-durable-platform';
 
-/** The Pi Durable Platform release these docs describe: a fix release on top of v0.1.0. */
-export const productVersion = 'v0.1.1';
+/** The Pi Durable Platform release these docs describe: a fix release on top of v0.1.1. */
+export const productVersion = 'v0.1.2';
 
 /** The date that release was tagged (YYYY-MM-DD). */
-export const productReleaseDate = '2026-10-18';
+export const productReleaseDate = '2026-10-19';
 
 /**
  * Links to files in the product's repository, pinned at the release's tag so
@@ -47,9 +47,9 @@ export const runtimeImage = `ghcr.io/ncecere/pi-durable-platform-runtime:${produ
 
 /** The release's signed multi-arch image digests: deploy by these. */
 export const productImageDigest =
-  'ghcr.io/ncecere/pi-durable-platform@sha256:ef046ad6534aa056adf0f10b1a9e41d5e93793e17e911b8cefab750dd909b147';
+  'ghcr.io/ncecere/pi-durable-platform@sha256:c20916ab720cc5353e17d8ad5d7c12a50fd637b9cbedc1e453f1a99ca6db6deb';
 export const runtimeImageDigest =
-  'ghcr.io/ncecere/pi-durable-platform-runtime@sha256:a7adb0c5f7913ff2f2ffd7783301f81d23caeeceb8d68abd48838e178d9d1168';
+  'ghcr.io/ncecere/pi-durable-platform-runtime@sha256:7b61a2af7b1c4aafec78ec0c5af4e9ae8e6978c1bfd375d9fea9f0b52e32c983';
 
 /** Pi, whose durable package the agents are built with: a separate project by other people. */
 export const piUrl = 'https://github.com/earendil-works/pi';

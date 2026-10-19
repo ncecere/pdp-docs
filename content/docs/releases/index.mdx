@@ -3,11 +3,12 @@ title: Releases
 description: Pi Durable Platform's releases, the images each one ships, what's planned next, and how the docs follow them.
 ---
 
-These docs describe **Pi Durable Platform v0.1.1**, from 2026-10-18: a fix release on top of the first release, v0.1.0.
+These docs describe **Pi Durable Platform v0.1.2**, from 2026-10-19: a fix release on top of v0.1.1 and the first release, v0.1.0.
 
 | Release | Date | Notes |
 |---|---|---|
-| **v0.1.1** (latest) | 2026-10-18 | [Release notes](/docs/releases/v0-1-1): `doctor` checks the agents database, platform staff read any team's agents, the product's logo, console fixes. No migrations. |
+| **v0.1.2** (latest) | 2026-10-19 | [Release notes](/docs/releases/v0-1-2): connecting apps' logos show (served by the platform), the agent page's badge follows wake and hibernate. No migrations. |
+| v0.1.1 | 2026-10-18 | [Release notes](/docs/releases/v0-1-1): `doctor` checks the agents database, platform staff read any team's agents, the product's logo, console fixes. No migrations. |
 | v0.1.0 | 2026-10-18 | [Release notes](/docs/releases/v0-1-0): the first release |
 
 Each release ships two images, for linux/amd64 and linux/arm64, signed with cosign keyless signing:
@@ -15,7 +16,7 @@ Each release ships two images, for linux/amd64 and linux/arm64, signed with cosi
 - `ghcr.io/ncecere/pi-durable-platform`: the platform;
 - `ghcr.io/ncecere/pi-durable-platform-runtime`: the agent runtime the platform starts for each agent.
 
-The project's [releases on GitHub](https://github.com/ncecere/pi-durable-platform/releases) carry the image digests, SBOMs and checksums. The full list of changes is the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.1.1/CHANGELOG.md).
+The project's [releases on GitHub](https://github.com/ncecere/pi-durable-platform/releases) carry the image digests, SBOMs and checksums. The full list of changes is the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.1.2/CHANGELOG.md).
 
 Pi Durable Platform follows semantic versioning. Before 1.0, a minor release may include breaking changes; its notes say how to adapt. Upgrading is described in [Upgrades and migrations](/docs/operate/upgrades).
 

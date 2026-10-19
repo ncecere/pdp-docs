@@ -20,6 +20,15 @@ You're asked once per app: your answer is remembered until you disconnect it. Ap
 
 An app that registered itself, instead of publishing a document on its own site, is shown as **Unverified**: its name is its own claim. Allow it only if you know where it comes from.
 
+## The app's logo
+
+If the app published a logo, it shows beside its name on this page, in **Connected apps** and on your page in **Admin › Users**. Your browser doesn't load it from the app's site: the platform fetches it, checks it and serves it itself (since v0.1.2). Your browser only talks to the platform, which keeps the console closed to other sites' images.
+
+- The logo must be on a public `https` address, with no redirects, and at most 256 KiB.
+- It must be a PNG, JPEG, GIF or WebP, checked by its bytes. SVG isn't accepted.
+- The platform keeps it for an hour, so a new logo can take that long to show.
+- If there is no usable logo, you see the app's initials instead.
+
 ## What an app can do
 
 A connected app acts as you **without your platform role**: an app you connect as a platform admin has no admin powers. It can:
