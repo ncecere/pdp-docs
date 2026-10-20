@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: "Pi Durable Platform's platform-wide settings: personal workspaces and their default limits, teams' own model providers and MCP servers, private networks, and trusted apps."
+description: "Pi Durable Platform's platform-wide settings: personal workspaces and their default limits, teams' own model providers and MCP servers, private networks, trusted apps and their app secrets."
 ---
 
 **Admin › Settings** holds the settings for the whole Pi Durable Platform. Platform auditors see them read-only. Each change is recorded in the audit log.
@@ -38,7 +38,7 @@ Every connection to a team's service is resolved and checked against this list w
 
 ## Trusted apps
 
-Apps people connect with OAuth Connect normally show an approval page once per person. **Trusted apps** skip it: people still sign in, and the app still gets only their access, never their platform role.
+Apps people connect with OAuth Connect normally show an approval page once per person. **Trusted apps** skip it: people still sign in, the app still gets only their access, never their platform role, and an app that expects a particular account still can't connect another.
 
 Add an app by its **Client ID**, the https address of its metadata document (its OAuth `client_id`), such as `https://chat.example.com/oauth/client-metadata.json`, and a **Label** for the list. Only apps identified by a metadata document can be trusted: an app that registered itself has a changing ID and a name anyone could choose. The list is empty by default and is read on every request, so changes apply at once.
 
@@ -49,3 +49,21 @@ A trusted app gets a person's approval without the person seeing a page. If its 
 </Callout>
 
 See [OAuth Connect](/docs/build/oauth-connect) for how apps connect.
+
+## App secrets
+
+An app secret lets a trusted app call the platform **as itself**: one event stream for the conversations of everyone who connected it, and their usage by person, without holding anyone's token. Only platform admins issue and delete them; auditors see the list.
+
+- **Issue secret** opens **Issue an app secret**: choose the **App**, one of the trusted apps with fewer than two secrets. The secret (`pdpcs_…`) is shown **once**, right after it's issued: copy it, and give it to the app's operators over a safe channel.
+- The list shows each secret's **App**, the first characters of the **Secret**, when it was **Issued** and when it was **Last used**. The platform keeps only a digest of the secret.
+- **Delete…** in a secret's menu stops it at once.
+
+An app has at most two secrets, so it can rotate: issue a new one, have the app move to it, then delete the old one.
+
+A secret works only while its app is on the trusted list. Taking the app off the list stops its secrets at once; they show **Not trusted: doesn't work** until you delete them or trust the app again.
+
+<Callout type="warn" title="A secret sees everyone who connected the app">
+With its secret, an app follows the threads of every person who connected it, and reads their usage. That is more than any one person's token allows. Issue secrets only to apps whose operators you'd trust with that.
+</Callout>
+
+Issuing and deleting a secret are recorded in the audit log (**Issued app secret**, **Deleted app secret**), with the app and the secret's first characters, never the secret. See [Apps with many people](/docs/build/apps-with-many-people) for what apps do with them.

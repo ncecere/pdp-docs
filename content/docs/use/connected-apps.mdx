@@ -10,13 +10,19 @@ An app such as a chat app can reach your agents **as you**, once you connect it 
 The app sends you to the platform. You sign in as usual, then see a page asking whether to allow the app. It names the app, the site that vouches for it, and what it will be able to do:
 
 - **See your agents and chat with them**
-- **Create agents in teams where you can**
+- **Create agents in your personal workspace (…) and in teams where you can** (without a personal workspace: **Create agents in teams where you can**)
+
+An app that asks only to **read** says so: "wants to read your agents as you", **See your agents and read your conversations with them**, **Follow your conversations as they change**, and **Never send messages or change anything**.
 
 Choose **Allow** or **Deny**. Either way you go back to the app.
 
 <Screenshot slot="consent-page" />
 
-You're asked once per app: your answer is remembered until you disconnect it. Apps your platform admins marked **trusted** skip this page; you still sign in.
+You're asked once per app: your answer is remembered until you disconnect it. If an app you allowed to read later asks to do more, you're asked again. Apps your platform admins marked **trusted** skip this page; you still sign in.
+
+### When the app expects another account
+
+An app can say which account it expects. If you're signed in as someone else, the page says **This isn't the account the app expects** and names both. It doesn't offer **Allow**: choose **Sign in as** that account, which signs you out so you can sign in as it, or **Cancel**. This happens even for trusted apps, so an app never connects the wrong account.
 
 An app that registered itself, instead of publishing a document on its own site, is shown as **Unverified**: its name is its own claim. Allow it only if you know where it comes from.
 
@@ -37,11 +43,13 @@ A connected app acts as you **without your platform role**: an app you connect a
 - read and send messages, follow conversations, and rename or delete threads, as you;
 - read your teams, their models, MCP servers, usage and limits.
 
+A **read-only** app can only list and read: it can't send messages, start, rename or delete threads, or change agents.
+
 It can't manage members, keys, service accounts, connected apps or anything in Admin. Every request is checked again against your account: if you're suspended or leave a team, the app loses that access at once. Messages it sends are recorded as yours, "via" the app.
 
 ## Your connected apps
 
-Your account menu › **Connected apps** lists the apps you allowed, with when you connected them and when they were last used.
+Your account menu › **Connected apps** lists the apps you allowed, with when you connected them and when they were last used. An app you allowed only to read is marked **Read only**.
 
 <Screenshot slot="connected-apps" />
 

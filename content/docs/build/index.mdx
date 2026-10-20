@@ -1,6 +1,6 @@
 ---
 title: API overview and authentication
-description: "Reaching Pi Durable Platform agents from your own app: the three kinds of credentials, which routes take which, the response envelope, revisions, and choosing between a service account and OAuth Connect."
+description: "Reaching Pi Durable Platform agents from your own app: the kinds of credentials, which routes take which, the response envelope, revisions, and choosing between a service account and OAuth Connect."
 ---
 
 Your app reaches Pi Durable Platform's agents through its HTTP API, at the platform's `APP_URL` (here `https://agents.example.com`). The app never talks to an agent's runtime: it sends messages to the platform and follows the conversation as server-sent events.
@@ -24,12 +24,13 @@ Send one as `Authorization: Bearer <credential>`.
 |---|---|---|---|
 | **Service account key** | `pdp_sa_` | The team's service account, in its own team, with its role (member or editor) | A team owner or admin: [Service accounts](/docs/teams/service-accounts) |
 | **Personal API key** | `pdp_` | A person, with their access | The person: [API keys](/docs/use/api-keys) |
-| **OAuth Connect access token** | `pdpat_` | A person who connected your app, **without** their platform role | [OAuth Connect](/docs/build/oauth-connect) |
+| **OAuth Connect access token** | `pdpat_` | A person who connected your app, **without** their platform role (with scope `agents:read`, reads only) | [OAuth Connect](/docs/build/oauth-connect) |
+| **App secret** | `pdpcs_` | A trusted app itself, on its two app-level endpoints only | A platform admin: [Apps with many people](/docs/build/apps-with-many-people) |
 
 ### Which to use
 
 - **Your app acts for itself**, for example giving each of its users an agent of their own inside your team: a **service account**. The conversations belong to the app; see [Agents by key](/docs/build/agents-by-key).
-- **Your app acts for a person** (their personal workspace, their teams' agents, their private threads): **OAuth Connect**. The person signs in to the platform once and allows your app.
+- **Your app acts for a person** (their personal workspace, their teams' agents, their private threads): **OAuth Connect**. The person signs in to the platform once and allows your app. A trusted app with many people can also follow all of them on one event stream with an app secret.
 - **A person's own script**: a personal API key.
 
 Both service-account mode and OAuth Connect are supported; an app can offer both, and use OAuth Connect where the platform advertises it (`connect` in `GET /v1/auth/config`).
@@ -43,14 +44,16 @@ Bearer credentials reach the **agent routes** and a few readings:
 - a team's models, usage, limits and MCP servers;
 - `GET /v1/me`, `GET /v1/teams` and `GET /v1/teams/{team}`, for people only: a service account key gets `403 person_required`.
 
-Everything else (administration, members, invites, creating keys, service accounts, connected apps, consent) needs a **browser session**. `PUT …/agents/by-key/…` is for service accounts only.
+Everything else (administration, members, invites, creating keys, service accounts, connected apps, consent) needs a **browser session**. `PUT …/agents/by-key/…` takes editor service accounts in a shared team, and the owner of a personal workspace (by any of their credentials) in that workspace ([Agents for your app's users](/docs/build/agents-by-key)). Moving an agent takes people only, not service accounts. App secrets reach `GET /v1/app/events` and `GET /v1/app/usage` and nothing else.
 
 ## Conventions
 
 - **Envelope**: success is `{"data": …}`; an error is `{"error": {"code": "…", "message": "…"}}` with an HTTP status. See [Errors and limits](/docs/build/errors-and-limits).
 - **Request IDs**: every response has `X-Request-ID`. Quote it when you report a problem; it's in the platform's logs and audit log.
 - **Not allowed looks like not found**: an agent or thread the caller may not use answers `404`, the same as one that doesn't exist.
-- **Revisions**: objects that can be edited carry a `revision`, returned as `ETag`. `PATCH` sends it back as `If-Match`: missing is `428 revision_required`, stale is `412 revision_conflict`.
+- **Revisions**: objects that can be edited carry a `revision`, returned as `ETag`. `PATCH` (and moving an agent) sends it back as `If-Match`: missing is `428 revision_required`, stale is `412 revision_conflict`.
+- **Paging** is opt-in on thread lists and conversations: without `limit` the reply is whole, as before. See [Threads and messages](/docs/build/threads-and-messages#page-and-search-the-list).
+- **Retries**: messages take a `requestId`, and creating an agent takes an `Idempotency-Key` header ([Creating agents safely](/docs/build/creating-agents)).
 - **IDs** are UUIDs. Teams also have slugs; routes with `{team}` take either.
 - **Times** are RFC 3339 strings in resources, and Unix milliseconds in conversations (`at`, `createdAt` of threads, …).
 - **Browser sessions** also need `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin` on writes. Bearer requests need neither.
@@ -61,14 +64,17 @@ Everything else (administration, members, invites, creating keys, service accoun
 curl https://agents.example.com/v1/me -H "Authorization: Bearer $TOKEN"
 ```
 
-For a person, it returns who they are, their groups, their teams and their capabilities (always false for an app's token). It wakes no agent. For a service account, use `GET /v1/agents` instead.
+For a person, it returns who they are, their groups, their teams and their capabilities (always false for an app's token). With an app's token it also has `connectedApp`: the app's `clientId`, the token's `scopes` and the person's `subject` for that app. It wakes no agent. For a service account, use `GET /v1/agents` instead.
 
 ## Next
 
 <Cards>
   <Card title="OAuth Connect" href="/docs/build/oauth-connect">Act as the person who connected your app.</Card>
-  <Card title="Agents by key" href="/docs/build/agents-by-key">One agent per user of your app, with a service account.</Card>
-  <Card title="Threads, messages and events" href="/docs/build/threads-and-messages">Send, stream, stop, rename and list.</Card>
+  <Card title="Apps with many people" href="/docs/build/apps-with-many-people">One event stream and usage for everyone who connected a trusted app.</Card>
+  <Card title="Agents for your app's users" href="/docs/build/agents-by-key">One agent per user, by key, with a service account or in personal workspaces.</Card>
+  <Card title="Creating agents safely" href="/docs/build/creating-agents">Retry agent creation with an Idempotency-Key.</Card>
+  <Card title="Threads and messages" href="/docs/build/threads-and-messages">Start, list, page, search, send, steer and stop.</Card>
+  <Card title="Event streams" href="/docs/build/events">Whole views or deltas, and every thread at once.</Card>
   <Card title="Private threads and authors" href="/docs/build/private-threads">Visibility, authors and message metadata.</Card>
   <Card title="Thread MCP servers" href="/docs/build/thread-mcp-servers">Give an agent your user's MCP servers for one thread.</Card>
   <Card title="Errors and limits" href="/docs/build/errors-and-limits">Error codes, rate limits and retries.</Card>

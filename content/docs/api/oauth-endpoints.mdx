@@ -27,13 +27,14 @@ Authorization server metadata (RFC 8414), cacheable for 60 seconds:
   "token_endpoint": "https://agents.example.com/oauth/token",
   "registration_endpoint": "https://agents.example.com/oauth/register",
   "revocation_endpoint": "https://agents.example.com/oauth/revoke",
-  "scopes_supported": ["agents"],
+  "scopes_supported": ["agents", "agents:read"],
   "response_types_supported": ["code"],
   "response_modes_supported": ["query"],
   "grant_types_supported": ["authorization_code", "refresh_token"],
   "token_endpoint_auth_methods_supported": ["none"],
   "revocation_endpoint_auth_methods_supported": ["none"],
   "code_challenge_methods_supported": ["S256"],
+  "prompt_values_supported": ["none", "consent"],
   "client_id_metadata_document_supported": true,
   "authorization_response_iss_parameter_supported": true
 }
@@ -47,7 +48,7 @@ Protected resource metadata (RFC 9728). A refused app token's `WWW-Authenticate`
 {
   "resource": "https://agents.example.com",
   "authorization_servers": ["https://agents.example.com"],
-  "scopes_supported": ["agents"],
+  "scopes_supported": ["agents", "agents:read"],
   "bearer_methods_supported": ["header"],
   "resource_name": "Pi Durable Platform"
 }
@@ -64,12 +65,15 @@ Protected resource metadata (RFC 9728). A refused app token's `WWW-Authenticate`
 | `redirect_uri` | One of the client's; loopback redirects match on any port |
 | `state` | Your value, returned unchanged |
 | `code_challenge`, `code_challenge_method` | PKCE, `S256` only, required |
-| `scope` | Optional, `agents` |
+| `scope` | Optional: `agents` (the default) or `agents:read` |
 | `resource` | Optional; must be `APP_URL` (else `invalid_target`) |
+| `prompt` | Optional: `none` (never show a page) or `consent` (always show the consent page). Other values, and `none` with another, are `invalid_request` |
+| `login_hint` | Optional: the email address or identity provider subject of the person the app expects, at most 320 characters on one line |
 
-- Without a session, it sends the person to the platform's sign-in and back.
-- Signed in, with the app already allowed or trusted, it redirects straight back with a code. Otherwise it shows the consent page (`/connect/consent` in the web app).
-- A suspended person gets an error page (`access_denied`).
+- Without a session, it sends the person to the platform's sign-in and back, passing `login_hint` to the identity provider. With `prompt=none`, it redirects back with `login_required` instead.
+- Signed in as someone `login_hint` doesn't name: with `prompt=none`, `login_required`; otherwise the consent page, which offers to sign in as the expected account or cancel, and refuses to allow.
+- Signed in, with the app already allowed for the scopes or trusted, it redirects straight back with a code. Otherwise it shows the consent page (`/connect/consent` in the web app), or with `prompt=none` redirects back with `consent_required`. `prompt=consent` shows the consent page anyway.
+- A suspended person gets an error page (`access_denied`); with `prompt=none`, `interaction_required`.
 - Problems with the request before the client and redirect URI are known good (an unknown or expired client, an unregistered redirect URI, a repeated parameter, an overlong query) are shown as an HTML page, never redirected. Later problems redirect to the app with `error`.
 - Success redirects with `code`, `state` and `iss` (RFC 9207).
 
@@ -79,13 +83,13 @@ Form-encoded (`application/x-www-form-urlencoded`). `client_id` in the form, or 
 
 **Authorization code**: `grant_type=authorization_code`, `client_id`, `code`, `redirect_uri`, `code_verifier`. Codes last 60 seconds and are used once.
 
-**Refresh**: `grant_type=refresh_token`, `client_id`, `refresh_token`. Returns a new pair and retires the old refresh token; reuse within 30 seconds returns another pair, reuse later revokes the connection (`invalid_grant`).
+**Refresh**: `grant_type=refresh_token`, `client_id`, `refresh_token`, and optionally a narrower `scope` (a wider one is `invalid_scope`). Returns a new pair and retires the old refresh token; reuse within 30 seconds returns another pair, reuse later revokes the connection (`invalid_grant`).
 
 ```json
-{"access_token": "pdpat_…", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "pdprt_…", "scope": "agents"}
+{"access_token": "pdpat_…", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "pdprt_…", "scope": "agents", "subject": "3f6c1d2e-…"}
 ```
 
-Access tokens last 1 hour, refresh tokens 30 days. Errors: `invalid_request`, `invalid_grant` (a bad, expired, used or revoked code or refresh token, a wrong verifier or redirect URI), `invalid_client`, `unsupported_grant_type`, `invalid_scope`, `invalid_target`.
+`scope` is what the request asked for, at most what the person allowed. `subject` is the person's ID for this app: a random UUID, stable across reconnects, different for each app. Access tokens last 1 hour, refresh tokens 30 days. Errors: `invalid_request`, `invalid_grant` (a bad, expired, used or revoked code or refresh token, a wrong verifier or redirect URI), `invalid_client`, `unsupported_grant_type`, `invalid_scope`, `invalid_target`.
 
 ## POST /oauth/register
 
@@ -103,4 +107,12 @@ Send access tokens as `Authorization: Bearer pdpat_…` to `/v1` routes that tak
 WWW-Authenticate: Bearer resource_metadata="https://agents.example.com/.well-known/oauth-protected-resource", error="invalid_token"
 ```
 
-The consent page and connected apps use `/v1` operations of their own: [getOAuthConsent](/docs/api/reference/oauth/getOAuthConsent), [decideOAuthConsent](/docs/api/reference/oauth/decideOAuthConsent), [listMyOAuthGrants](/docs/api/reference/oauth/listMyOAuthGrants), [revokeMyOAuthGrant](/docs/api/reference/oauth/revokeMyOAuthGrant), and for platform admins the trusted apps ([adminUpdateTrustedClients](/docs/api/reference/oauth/adminUpdateTrustedClients)).
+An `agents:read` token sent with any method but `GET` or `HEAD` gets `403 insufficient_scope` with:
+
+```text
+WWW-Authenticate: Bearer error="insufficient_scope", scope="agents"
+```
+
+App secrets (`pdpcs_…`) aren't tokens and don't work here: they reach only [getAppEvents](/docs/api/reference/oauth/getAppEvents) and [getAppUsage](/docs/api/reference/oauth/getAppUsage). See [Apps with many people](/docs/build/apps-with-many-people).
+
+The consent page and connected apps use `/v1` operations of their own: [getOAuthConsent](/docs/api/reference/oauth/getOAuthConsent), [decideOAuthConsent](/docs/api/reference/oauth/decideOAuthConsent), [listMyOAuthGrants](/docs/api/reference/oauth/listMyOAuthGrants), [revokeMyOAuthGrant](/docs/api/reference/oauth/revokeMyOAuthGrant), and for platform admins the trusted apps ([adminUpdateTrustedClients](/docs/api/reference/oauth/adminUpdateTrustedClients)), their secrets ([adminCreateAppSecret](/docs/api/reference/oauth/adminCreateAppSecret)) and the apps people connected ([adminListConnectedApps](/docs/api/reference/oauth/adminListConnectedApps)).

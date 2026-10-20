@@ -1,0 +1,89 @@
+---
+title: Apps with many people
+description: "For a trusted OAuth Connect app in Pi Durable Platform: an app secret from a platform admin, one event stream for everyone who connected the app, their usage by person and day, and the subjects that name them."
+---
+
+A chat app with hundreds of people shouldn't hold one event stream per person. With OAuth Connect, a **trusted** app can call two Pi Durable Platform endpoints **as itself**:
+
+- `GET /v1/app/events`: one event stream for the threads of everyone who connected the app;
+- `GET /v1/app/usage`: their usage, by person and day.
+
+Both name people by their **subject** for your app, never by email or platform user ID. Everything else your app does still goes through each person's own token ([OAuth Connect](/docs/build/oauth-connect)).
+
+## Get an app secret
+
+1. Your app identifies itself with a **Client ID Metadata Document** (an `https` URL), not a registration.
+2. A platform admin puts it on the **trusted apps** list and issues it a secret in **Admin › Settings › App secrets** ([Settings](/docs/administer/settings#app-secrets)).
+3. The secret starts `pdpcs_` and is shown once. Keep it on your server, like a password.
+
+An app has at most two secrets, so it can rotate: the admin issues a new one, you move to it, the admin deletes the old one. A deleted secret stops working at once. So do all of an app's secrets when it is taken off the trusted list.
+
+Send the secret as `Authorization: Bearer pdpcs_…`. It works on these two endpoints only, and they take nothing else: not a session, not a person's token, not an API key. It isn't used, or accepted, at `/oauth/token`: connecting people stays the usual public flow with PKCE. Requests count against `REQUESTS_PER_MINUTE` per secret. A missing, wrong or deleted secret, or an app that isn't trusted, gets `401`.
+
+## Subjects
+
+When a person connects your app, the platform gives them a **subject** for it: a random UUID, the same each time they connect your app (even after they disconnect), and different for every app. You get it:
+
+- in the token response, as `subject`;
+- from `GET /v1/me` with their token, as `connectedApp.subject`.
+
+Store it with the person's tokens, and use it to find whose event or usage row you're looking at.
+
+## Follow everyone's threads
+
+```sh
+curl -N https://agents.example.com/v1/app/events -H "Authorization: Bearer $PDP_APP_SECRET"
+```
+
+`event: ready` first, then an `event: thread` whenever a thread changes that one or more of your app's people may see:
+
+```text
+event: thread
+data: {"subjects":["3f6c1d2e-…"],"agentId":"…","threadId":"…","deleted":false,"thread":{"title":"Release questions","busy":true,…}}
+```
+
+`subjects` lists the people the change is for. `thread` is the thread now, as in the thread list; it is absent when `deleted` is true. `?once=true` sends `ready` and ends.
+
+Each person sees what their own `GET /v1/agents/events` through your app would show:
+
+- agents of the teams they're members of, and of their personal workspace, never service-managed agents and never platform staff reads;
+- shared threads and their own private threads; a reserved thread (no message yet) only if it's theirs.
+
+The people are those with an active connection to your app (any scope) and an active account. When someone disconnects, their connection expires, they're suspended or they're denied by the group re-check, their events stop from the next change on, on every platform replica.
+
+The stream sends a keep-alive comment every 15 seconds and ends when the platform restarts. Every 30 seconds it checks that its secret still exists and the app is still trusted, and ends if not; reconnecting is then `401`. A slow reader misses events: reconnect, and refresh the threads you show with each person's token.
+
+The stream says which threads changed. To read a conversation, use the person's token on the thread's routes ([Event streams](/docs/build/events)).
+
+## Read usage
+
+```sh
+curl "https://agents.example.com/v1/app/usage?from=2026-10-01&to=2026-10-31&limit=500" \
+  -H "Authorization: Bearer $PDP_APP_SECRET"
+```
+
+```json
+{
+  "data": {
+    "from": "2026-10-01",
+    "to": "2026-10-31",
+    "rows": [
+      {"day": "2026-10-01", "subject": "3f6c1d2e-…", "requests": 42, "inputTokens": 61200, "outputTokens": 9800,
+       "cacheReadTokens": 20400, "cacheWriteTokens": 0, "costUsd": 0.31, "unpricedRequests": 0, "toolCalls": 7}
+    ],
+    "nextCursor": "…"
+  }
+}
+```
+
+- One row per person and UTC day, ordered by day, then subject. `toolCalls` counts calls through the platform's MCP proxy. `costUsd` is an estimate at the models' current prices; `unpricedRequests` were to models without prices.
+- `from` defaults to 6 days before `to`, and `to` to today; at most 92 days. `limit` is 1 to 1,000 (100 by default); pass `nextCursor` back as `cursor` for the next page.
+- People who have since disconnected your app are included.
+
+### What counts as your app's
+
+Agents make model and tool requests, not apps. So the platform remembers who last sent a message to each thread, and through which connection, and counts an agent's request for your app when that is unambiguous: every thread the agent is working on (replying, or sent to or finished in the last minute) was last sent to through the same connection. Otherwise the request counts for no app.
+
+This never puts one person's work on another app. But it misses work when one agent answers two apps, or an app and the console, at the same moment, and on a shared thread a reply counts for whoever sent last. Team and platform usage reports are unchanged.
+
+Platform admins see the same attribution in **Admin › Usage**, filtered by app ([Usage](/docs/administer/usage)).

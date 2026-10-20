@@ -1,11 +1,11 @@
 ---
 title: OAuth Connect
-description: "Let your app act as a person in Pi Durable Platform: discovery, identifying your app with a metadata document or registration, authorization with PKCE, tokens, refresh rotation and its grace, revocation, and handling 401s."
+description: "Let your app act as a person in Pi Durable Platform: discovery, identifying your app with a metadata document or registration, scopes, authorization with PKCE, silent reconnects with prompt=none, the expected account with login_hint, tokens and subjects, refresh rotation and its grace, revocation, and handling 401s."
 ---
 
 With **OAuth Connect**, a person connects your app to Pi Durable Platform once, and your app then calls the API **as that person**: their personal workspace, their teams' agents, their private threads. The platform is a small OAuth 2.1 authorization server and issues its own opaque tokens, so this works whatever identity provider the platform uses. Your app never sees the person's password or identity provider tokens.
 
-All clients are **public**: no client secret. PKCE is required.
+All clients are **public**: no client secret on the authorization code flow. PKCE is required. (A trusted app can get an app secret from a platform admin, but only for its app-level endpoints: see [Apps with many people](/docs/build/apps-with-many-people).)
 
 ## 1. Discover
 
@@ -13,7 +13,7 @@ All clients are **public**: no client secret. PKCE is required.
 curl https://agents.example.com/.well-known/oauth-authorization-server
 ```
 
-returns the authorization server metadata (RFC 8414): the `issuer` (the platform's `APP_URL`), `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, `revocation_endpoint`, `scopes_supported: ["agents"]`, `code_challenge_methods_supported: ["S256"]`, and `client_id_metadata_document_supported: true`.
+returns the authorization server metadata (RFC 8414): the `issuer` (the platform's `APP_URL`), `authorization_endpoint`, `token_endpoint`, `registration_endpoint`, `revocation_endpoint`, `scopes_supported: ["agents", "agents:read"]`, `code_challenge_methods_supported: ["S256"]`, `prompt_values_supported: ["none", "consent"]`, and `client_id_metadata_document_supported: true`.
 
 `GET /.well-known/oauth-protected-resource` (RFC 9728) names the resource (the same `APP_URL`) and its authorization server. `GET /v1/auth/config` also has a `connect` object with the endpoints; its presence is how an app can tell that a platform supports OAuth Connect.
 
@@ -79,16 +79,52 @@ https://agents.example.com/oauth/authorize
   &scope=agents
 ```
 
-- `scope` is optional; `agents` is the only scope.
+- `scope` is optional: `agents` (the default) or `agents:read`. See [Scopes](#scopes).
 - `resource`, if you send it, must be the platform's `APP_URL` (otherwise `invalid_target`).
+- `prompt` and `login_hint` are optional. See [Silent reconnects](#silent-reconnects-with-promptnone) and [The expected account](#the-expected-account-with-login_hint).
 - Redirect URIs must match a registered one exactly, except that a **loopback** redirect matches on any port (RFC 8252). `localhost` and `127.0.0.1` are different hosts.
-- A parameter given twice is an error. Others the platform doesn't use are ignored; `prompt=none` and `login_hint` aren't supported.
+- A parameter given twice is an error. Others the platform doesn't use are ignored.
 
 The person signs in to the platform as usual (so its sign-in rules, groups and suspension apply), then sees the approval page once. Approval is remembered, and trusted apps skip the page. Already signed in and approved, they come straight back without seeing anything. Do this as a top-level navigation the person starts, never in a hidden frame.
 
 Errors about the client or the redirect URI are shown to the person as a page, never redirected. Later errors come back to your redirect URI.
 
 On success the browser comes back with `code`, `state` and `iss`. **Check `state`, and check that `iss` is the issuer you discovered.**
+
+### Scopes
+
+| Scope | The app may |
+|---|---|
+| `agents` | Act as the person on the routes below: use and create agents, send messages, rename and delete threads. It includes `agents:read` |
+| `agents:read` | The same routes, **reads only**: list agents and threads, read conversations, follow event streams, read usage, models and limits. No messages, no new threads, no changes |
+
+An `agents:read` token gets `403 insufficient_scope` for every method but `GET` and `HEAD`, with `WWW-Authenticate: Bearer error="insufficient_scope", scope="agents"`. The consent page then says the app "wants to read your agents" and will "never send messages or change anything", and **Connected apps** marks the connection **Read only**.
+
+Asking for `agents` on a connection the person allowed for `agents:read` shows the consent page again (with `prompt=none`, `consent_required`); allowing widens the connection. Asking for `agents:read` on an `agents` connection is silent and gets read-only tokens.
+
+### Silent reconnects with prompt=none
+
+With `prompt=none` the platform never shows a page. If it can answer at once (the person is signed in, is the one `login_hint` names, and allowed your app before for these scopes, or your app is trusted), the code comes back as usual. Otherwise the browser comes back to your redirect URI, with `state` and `iss`, and one of these errors:
+
+| `error` | Why | What to do |
+|---|---|---|
+| `login_required` | Not signed in to the platform, or signed in as someone other than `login_hint` | Send the person through without `prompt` |
+| `consent_required` | The person hasn't allowed your app for these scopes, and it isn't trusted | Send the person through without `prompt` |
+| `interaction_required` | Signed in, but the account can't use the platform now (suspended, or no longer in an allowed group) | Send the person through without `prompt`; they see why |
+
+Use it to reconnect quietly when your app has lost its tokens, and fall back to the normal flow when it fails. It still needs a top-level navigation: never a hidden frame.
+
+`prompt=consent` shows the consent page even when the app was allowed before or is trusted. `login`, `select_account` and any value combined with `none` are `invalid_request`: the platform can't make the identity provider sign the person in again or choose an account.
+
+### The expected account with login_hint
+
+If your app knows who should connect, send their email address (or their identity provider subject) as `login_hint`, at most 320 characters on one line (otherwise `invalid_request`).
+
+- **Not signed in**: the platform passes the hint to the identity provider when it sends the person to sign in.
+- **Signed in as that person** (the email matches, ignoring case, or the subject does): nothing changes.
+- **Signed in as someone else**: the platform never connects that account, even for a trusted or remembered app. With `prompt=none` you get `login_required`. Without it, the consent page says whom your app expected and offers **Sign in as …** (it signs out and starts your request again, so the person signs in with the hint) or **Cancel** (`access_denied`). Allowing is refused (`409 account_mismatch`).
+
+Check the `subject` in the token response, or `GET /v1/me`, against the account you expected all the same.
 
 ## 4. Exchange the code
 
@@ -107,11 +143,14 @@ curl -X POST https://agents.example.com/oauth/token \
   "token_type": "Bearer",
   "expires_in": 3600,
   "refresh_token": "pdprt_…",
-  "scope": "agents"
+  "scope": "agents",
+  "subject": "3f6c1d2e-…"
 }
 ```
 
 A code lives 60 seconds and works once. The access token lasts **1 hour**, the refresh token **30 days**. Keep tokens on your server, encrypted; never in the browser.
+
+`scope` is what you asked for, at most what the person allowed. `subject` is the person's ID **for your app**: a random UUID, not their email or platform user ID, the same each time they connect your app (even after disconnecting) and different for every app. `GET /v1/me` with the token returns it too, as `connectedApp.subject` with `connectedApp.clientId` and `connectedApp.scopes`. The app-level endpoints name people by it.
 
 ## 5. Call the API
 
@@ -119,7 +158,7 @@ A code lives 60 seconds and works once. The access token lasts **1 hour**, the r
 curl https://agents.example.com/v1/agents -H "Authorization: Bearer pdpat_…"
 ```
 
-The token acts as the person **without their platform role**. It reaches the agent routes, template listings, their teams' models, usage, limits and MCP servers, and `GET /v1/me`, `GET /v1/teams` and `GET /v1/teams/{team}`. It can't reach administration, members, keys, service accounts or connected apps. `PUT …/agents/by-key/…` is for service accounts only: with a person's token, create agents with `POST /v1/teams/{team}/agents` (for example in their personal workspace, the team with `kind: personal` in `GET /v1/teams`) and keep the agent's ID.
+The token acts as the person **without their platform role**. It reaches the agent routes, template listings, their teams' models, usage, limits and MCP servers, and `GET /v1/me`, `GET /v1/teams` and `GET /v1/teams/{team}`. It can't reach administration, members, keys, service accounts or connected apps. To give the person an agent, use `PUT …/agents/by-key/{key}` in their personal workspace (the team with `kind: personal` in `GET /v1/teams`), or `POST /v1/teams/{team}/agents` with an `Idempotency-Key`. See [Agents for your app's users](/docs/build/agents-by-key) and [Creating agents safely](/docs/build/creating-agents).
 
 Every request checks the token, its connection and the person again: a suspended person, or one who left a team, loses that access at once. Requests count against the person's rate limit, shared with their browser and API keys. What your app does is recorded in the audit log as the person, via your app.
 
@@ -131,7 +170,7 @@ curl -X POST https://agents.example.com/oauth/token \
   -d grant_type=refresh_token -d client_id=… -d refresh_token=pdprt_…
 ```
 
-Each refresh returns a **new pair** and retires the refresh token you sent. Keep only the newest.
+Each refresh returns a **new pair** and retires the refresh token you sent. Keep only the newest. A refresh may send a narrower `scope` (`agents:read` on an `agents` connection), never a wider one (`invalid_scope`).
 
 - **Within 30 seconds** of a refresh token's first use, presenting it again returns another valid pair. Nothing is revoked, and the first pair stays valid. This covers two of your servers refreshing at once.
 - **After 30 seconds**, presenting a retired refresh token is treated as theft: the whole connection is revoked, all its tokens stop working, the answer is `invalid_grant`, and the person must connect again.

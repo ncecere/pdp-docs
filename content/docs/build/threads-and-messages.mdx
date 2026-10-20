@@ -1,9 +1,9 @@
 ---
-title: Threads, messages and events
-description: "Talking to a Pi Durable Platform agent from your app: listing agents and threads, sending messages, following a conversation over server-sent events, the conversation view, stopping, renaming, deleting and hibernating."
+title: Threads and messages
+description: "Talking to a Pi Durable Platform agent from your app: listing agents, starting, listing, paging and searching threads, reading a conversation page by page, sending and steering messages, stopping, renaming, deleting and hibernating."
 ---
 
-A conversation with a Pi Durable Platform agent is a **thread**. You start one, send messages to it and follow it as **server-sent events**. Messages are accepted at once (`202`); the reply arrives on the thread.
+A conversation with a Pi Durable Platform agent is a **thread**. You start one, send messages to it and follow it as **server-sent events** ([Event streams](/docs/build/events)). Messages are accepted at once (`202`); the reply arrives on the thread.
 
 ## Find the agent
 
@@ -13,7 +13,7 @@ GET /v1/teams/{team}/agents         # one team's
 GET /v1/agents/{agentId}            # one
 ```
 
-Each agent has its `teamId`, `teamSlug` and `teamName`, its template and version, its model, `enabled`, and `running` (whether its runtime is up now). `GET /v1/agents?includeManaged=true` also lists service-managed agents to a team's owners and admins, who can see but not use them; don't pass it with a person's token.
+Each agent has its `teamId`, `teamSlug` and `teamName`, its template and version, its model, `serviceManaged`, `enabled`, and `running` (whether its runtime is up now). `GET /v1/agents?includeManaged=true` also lists service-managed agents to a team's owners and admins, who can see but not use them; don't pass it with a person's token.
 
 ## Start a thread
 
@@ -43,7 +43,7 @@ Your app may still choose a thread's ID: 1 to 64 letters, digits, dashes or unde
 ## List, read, rename and delete
 
 ```sh
-GET    /v1/agents/{agentId}/threads                 # list, most recently used first
+GET    /v1/agents/{agentId}/threads                 # list, most recent activity first
 GET    /v1/agents/{agentId}/threads/{threadId}      # the transcript and the reply in progress
 PATCH  /v1/agents/{agentId}/threads/{threadId}      # {"title": "…"}, 1 to 200 characters
 DELETE /v1/agents/{agentId}/threads/{threadId}      # stop it and remove it from the list
@@ -51,7 +51,42 @@ DELETE /v1/agents/{agentId}/threads/{threadId}      # stop it and remove it from
 
 A reserved thread, one that has no message yet, can be deleted too.
 
-**Listing never wakes the agent**: the platform keeps a record of each thread. Each has `title` (by default the first line of its first message, up to 60 characters), `createdAt`, `updatedAt` (moves when a message is sent and when a reply ends), `busy`, `lastReplyAt`, `lastError` (why the last reply failed; absent when it succeeded), `visibility`, `createdBy` and `participants`. The list has every thread the caller may see, without paging. Reading a transcript, sending, stopping and deleting wake the agent.
+**Listing never wakes the agent**: the platform keeps a record of each thread. Each has `title` (by default the first line of its first message, up to 60 characters), `createdAt`, `updatedAt` (moves when a message is sent and when a reply ends), `busy`, `lastReplyAt`, `lastError` (why the last reply failed; absent when it succeeded), `visibility`, `createdBy` and `participants`. Reading a transcript, sending, stopping and deleting wake the agent.
+
+### Page and search the list
+
+Without parameters the list has every thread the caller may see, as before. Paging is opt-in:
+
+```sh
+curl "https://agents.example.com/v1/agents/$AGENT/threads?limit=50" -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{"data": [{"threadId": "…", "title": "Release questions", …}, …], "nextCursor": "…"}
+```
+
+- `limit` is 1 to 200. The reply is one page, newest activity first, with `nextCursor` beside `data` when more threads follow. The last page has no `nextCursor`.
+- Pass `nextCursor` back as `cursor`, with the same `q`. The cursor is opaque; a malformed one is `400 invalid_cursor`.
+- `q` keeps the threads whose title contains it, ignoring case (at most 200 characters). It works with or without `limit`.
+
+Every page follows the same visibility rules as the whole list: shared threads and the caller's own private ones.
+
+### Read a conversation page by page
+
+`GET …/threads/{threadId}` without parameters returns the whole transcript. A long conversation can be read backwards instead:
+
+```sh
+GET /v1/agents/{agentId}/threads/{threadId}?limit=50                    # the latest 50 messages
+GET /v1/agents/{agentId}/threads/{threadId}?limit=50&before=<cursor>    # the 50 before them
+```
+
+- `limit` is 1 to 200; it is 50 when you send only `before`.
+- The reply is the usual conversation view, with `earlierCursor` when earlier messages exist. Pass it as `before` for the page before. Without `earlierCursor`, you have reached the start.
+- A page never starts with a tool result: it then also holds the reply that made the call.
+- If the message a cursor names has left the conversation's view (the conversation was compacted or reset), the page is empty.
+- The reply in progress and the running tools are always the current ones.
+
+[Event streams](/docs/build/events) take `limit` too, so an app can open a long conversation with its latest messages and load earlier ones on request.
 
 ## Send a message
 
@@ -66,45 +101,25 @@ curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/message
 | `text` | Required, up to 32,000 characters. Text only: no files or images. |
 | `requestId` | Idempotency key: a repeated one isn't submitted again. Send one with every message and reuse it on retries. |
 | `visibility` | `shared` (default) or `private`, chosen when the thread starts: by `POST …/threads`, by its **first** message, or by setting its MCP servers. See [Private threads](/docs/build/private-threads). |
+| `whenBusy` | What to do while a reply is running: `followUp` (the default) or `steer`. See [Steer a reply](#steer-a-reply). |
 | `mcpServers` | The MCP servers your user enabled for this thread. See [Thread MCP servers](/docs/build/thread-mcp-servers). |
 
-The answer is `202` with a `submissionId`. The first message to an ID with no thread starts it (a thread from `POST …/threads` already exists, and the message ends its reservation). A message sent while the agent is replying waits and runs after the current reply; it doesn't interrupt it. Don't set an author: the platform sets it from your credential.
+The answer is `202` with a `submissionId`. The first message to an ID with no thread starts it (a thread from `POST …/threads` already exists, and the message ends its reservation). Don't set an author: the platform sets it from your credential.
 
-## Follow the conversation
+### Steer a reply
 
-```sh
-curl -N https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/events -H "Authorization: Bearer $TOKEN"
-```
+A message sent while the agent is replying does one of two things, chosen by `whenBusy`:
 
-The stream sends a `view` event after every change (at most about 10 a second), each carrying the **whole** conversation view, not a delta:
-
-```text
-event: view
-data: {"busy":true,"messages":[…],"partial":{"text":"The release added…","thinking":""},"tools":[…]}
-```
-
-| Field | |
-|---|---|
-| `busy` | A reply is running |
-| `messages` | The transcript: `user`, `assistant` and `tool` messages ([fields](/docs/build/private-threads#message-metadata)) |
-| `partial` | The reply being written: `text` and `thinking` |
-| `tools` | Tools running now: `callId`, `name`, `status` and `output` so far |
-
-Replace your view with each event's. `?once=true` sends the current view as one event and ends: the same as `GET` on the thread.
-
-**An open stream keeps the agent awake.** Close it when nobody is looking at the conversation; in a personal workspace, open streams can hold all its `maxRunning` places.
-
-## Follow every thread at once
+- **`followUp`** (the default): it waits for the reply in progress to end, then starts the next reply. Nothing is interrupted.
+- **`steer`**: it joins the reply in progress. The agent sees it after its current round of tool calls (or with its answer), before it goes on, and the reply continues with it in mind. Use it for "actually, only last week" while the agent is still working.
 
 ```sh
-curl -N https://agents.example.com/v1/agents/events -H "Authorization: Bearer $TOKEN"
+curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/messages \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"text": "Only the release notes, please.", "requestId": "msg-7f3b", "whenBusy": "steer"}'
 ```
 
-One stream for every agent the caller may use: `event: ready` first, then `event: thread` with `{agentId, threadId, deleted, thread}` whenever a thread is created, renamed, starts or finishes a reply, or is deleted. `?agentId=` limits it to one agent. It **never wakes an agent**, so use it for inbox-style lists (unread, done) and keep that state in your app. It covers shared threads and the caller's own private ones.
-
-Both streams send a keep-alive comment every 15 seconds and end when the platform restarts (for example during a deploy). Reconnect with a little random delay. A slow reader may miss `thread` events: refresh a thread from `GET …/threads` if it looks stale.
-
-The platform checks the caller's access again every 30 seconds while a stream is open. A thread's stream ends when the caller is suspended, denied by the [group re-check](/docs/operate/oidc#re-checking-groups) or may no longer use the agent, or when the thread is someone else's private one. So does `GET /v1/agents/events?agentId=…`. Reconnecting is then refused like any other request. A stream of every agent stays open, but stops carrying the threads of an agent the caller can no longer use. A revoked API key, app grant or service account key doesn't end a stream that is already open.
+The transcript shows a steering message where the agent took it in: a user message after the tool results of the reply it changed, and before that reply's next answer. In a delta stream it arrives as a `message.added`. On an idle thread, both values simply start a reply.
 
 ## Stop, hibernate, turn off
 

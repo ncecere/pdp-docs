@@ -1,6 +1,6 @@
 ---
 title: Usage
-description: "A Pi Durable Platform team's model usage: requests, tokens and estimated cost per day, model or agent, where the numbers come from, and exporting them."
+description: "A Pi Durable Platform team's model usage: requests, tokens and estimated cost per day, model, agent, or agent by day, where the numbers come from, and reading them through the API for several agents at once."
 ---
 
 The team's **Usage** page in Pi Durable Platform shows how much the team's agents used their models: requests, input and output tokens, cache reads and writes, and an **Estimated cost**. Every member can see it, and so can the team's service accounts through the API.
@@ -8,7 +8,7 @@ The team's **Usage** page in Pi Durable Platform shows how much the team's agent
 <Screenshot slot="team-usage" />
 
 - **Period**: the date range (days in UTC), up to 366 days; the last 30 days by default.
-- **Group by**: **Day**, **Model** or **Agent**.
+- **Group by**: **Day**, **Model**, **Agent** or **Agent by day** (one row per agent per day).
 - A chart of tokens per day, and a table with the totals.
 
 An agent's **Overview** shows its own usage over the last 30 days.
@@ -35,4 +35,15 @@ curl "https://agents.example.com/v1/teams/support/usage?groupBy=agent&from=2026-
   -H "Authorization: Bearer $PDP_SA_KEY"
 ```
 
-`groupBy` is `day`, `model` or `agent`, one at a time. Add `agentId` to see one agent, for example by day. See [getTeamUsage](/docs/api/reference/models/getTeamUsage).
+`groupBy` is `day`, `model`, `agent` or `agent,day`. With `agent,day` there is one row per agent per day, sorted by agent name, then agent ID, then day; summed service-managed agents and deleted agents come last.
+
+`agentId` narrows the report to some agents. Repeat it for several, up to 100, so an app can show the daily usage of all its agents in one call:
+
+```sh
+curl "https://agents.example.com/v1/teams/support/usage?groupBy=agent,day&agentId=$A1&agentId=$A2&from=2026-10-01&to=2026-10-31" \
+  -H "Authorization: Bearer $PDP_SA_KEY"
+```
+
+The filter counts the team's own usage only. An ID that isn't one of the team's agents you may see (another team's agent, a deleted or unknown one, or a service-managed agent when you see those summed) matches nothing, without an error, so the report never says whether such an agent exists.
+
+Usage is recorded per team and agent, not per person: there is no report of one person's usage across their teams. A personal workspace's report works the same way. See [getTeamUsage](/docs/api/reference/models/getTeamUsage).

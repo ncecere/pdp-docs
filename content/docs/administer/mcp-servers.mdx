@@ -33,6 +33,8 @@ The platform connects and reads the server's tools when you add it. **Refresh to
 
 A template version lists servers, each with all its tools or some of them. Agents on that version get them as `mcp__<slug>__<tool>`, defined from the tool list the platform stored and connected on first use. With more than 20 MCP tools, they're deferred behind a `tool_search` tool.
 
+A server that uses the MCP Apps extension can mark a tool for its own interface only (`_meta.ui.visibility` without `"model"`). The platform leaves such tools out of the list it reads from the server, so they're never offered to a model. The platform doesn't show MCP Apps' interfaces yet: the server's other tools work as plain tools.
+
 Every agent and every thread uses the same headers. Anything the server keeps (notes, tickets) is shared by everyone who uses those agents. Prefer servers whose credentials suit everyone a template reaches.
 
 ## Publishing, turning off, deleting

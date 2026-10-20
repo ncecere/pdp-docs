@@ -1,6 +1,6 @@
 ---
 title: Usage
-description: Every Pi Durable Platform team's model usage for platform admins and auditors, grouped by day, model, agent or team, with estimated cost.
+description: "Every Pi Durable Platform team's model usage for platform admins and auditors, grouped by day, model or team, with estimated cost, and filtered by the connected app it was made through."
 ---
 
 **Admin › Usage** shows model usage across Pi Durable Platform: requests, input and output tokens, cache reads and writes, and **Estimated cost**, over a period of up to 366 days (UTC).
@@ -12,5 +12,13 @@ Group by **Day**, **Team** or **Model**. The report covers every team and person
 The numbers come from the same places as a team's report: the model gateway records proxied requests, and agents report requests to direct-mode providers and the platform's default model. The cost uses the models' current prices; set them in [Models](/docs/administer/models#prices-and-cost). Requests to unpriced models are counted but not costed.
 
 Usage covers model requests only: not runtime time, storage or MCP calls.
+
+## By connected app
+
+The **App** filter shows **All usage** by default. Under **Through a connected app** it lists the apps people have connected with OAuth Connect, each with how many people use it. Choose one to see only the model requests agents made while answering messages sent through that app. The choice is kept in the page's address (`?app=`), so you can share the link.
+
+Agents make requests, not apps, so the platform counts a request for an app only when that is unambiguous: every thread the agent is working on at that moment was last sent to through the same connection. An agent answering two apps, or an app and the console, at the same moment counts for neither, and on a shared thread a reply counts for whoever sent last. The filter never puts one app's work on another, but it can miss some. See [Apps with many people](/docs/build/apps-with-many-people#what-counts-as-your-apps).
+
+Through the API: `GET /v1/admin/usage?clientId=<the app's client_id>`, and `GET /v1/admin/oauth-clients` for the apps people connected.
 
 Teams see their own report under **Usage**; see [Team usage](/docs/teams/usage). Through the API: [adminGetUsage](/docs/api/reference/models/adminGetUsage).

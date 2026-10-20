@@ -43,7 +43,7 @@ An agent has these tabs:
 - **Overview**: its status (running now or hibernated, turned off), template and version, model, tools (the MCP servers it can call), storage, its usage over the last 30 days, and **Use it from your app** with example requests.
 - **Test**: a chat with it ([Testing an agent](/docs/use/test-chat)).
 - **Conversations**: only for platform admins ([Reading conversations](/docs/administer/reading-conversations)).
-- **Settings**: name, description and model; turning it off; deleting it.
+- **Settings**: name, description and model; turning it off; moving it to another team; deleting it.
 
 While the agent is running, its page header has **Hibernate**, which stops its runtime now; the next request wakes it. Any member can use it; platform staff who aren't on the team can't (since v0.1.1).
 
@@ -67,17 +67,24 @@ If a platform admin turns off or unpublishes the model an agent runs on, its Ove
 
 **Turn off agent** in **Settings** hibernates it and refuses new messages, from the console and from apps; its conversations are kept but can't be read until it's turned on again. Apps get an error on their next message.
 
+## Move it
+
+**Move agent…** in **Settings** (owners and admins of both teams) moves the agent, with its conversations, to another team or to your personal workspace. The dialog shows what changes before you confirm. See [Moving an agent](/docs/use/moving-an-agent).
+
 ## Delete it
 
 **Delete agent** in **Settings** (owners and admins) deletes the agent, its database schema and role, and every conversation. Apps using it get errors. This can't be undone.
 
 ## Service-managed agents
 
-An app with an editor [service account](/docs/teams/service-accounts) can create agents with its own **external key**, typically one per user of the app (see [Agents by key](/docs/build/agents-by-key)). These agents are **service-managed**:
+An app with an editor [service account](/docs/teams/service-accounts) can create agents in your team with its own **external key**, typically one per user of the app (see [Agents for your app's users](/docs/build/agents-by-key)). These agents are **service-managed**:
 
 - Only the team's service accounts use them. Members don't see them at all.
 - The team's owners and admins see them in **Agents**, marked **Service-managed**, with their external key, status and last use, but never their conversations, and can delete them.
 - Editor service accounts can change and delete them.
+- They can't be moved to another team.
+
+An agent a person gets by key in their own personal workspace isn't service-managed: it's theirs like any other.
 - They don't count towards the team's limit of 50 agents.
 
 ## Names and limits

@@ -2,5 +2,5 @@
   "title": "Build apps",
   "description": "Reaching agents from your own app through the API",
   "root": true,
-  "pages": ["index", "oauth-connect", "agents-by-key", "threads-and-messages", "private-threads", "thread-mcp-servers", "errors-and-limits"]
+  "pages": ["index", "oauth-connect", "apps-with-many-people", "agents-by-key", "creating-agents", "threads-and-messages", "events", "private-threads", "thread-mcp-servers", "errors-and-limits"]
 }

@@ -1,0 +1,188 @@
+---
+title: Event streams
+description: "Following Pi Durable Platform conversations as server-sent events: whole views, the incremental delta format with its event types and a client loop, reconnecting with Last-Event-ID, and the stream of every thread."
+---
+
+Pi Durable Platform sends conversations to your app as **server-sent events** (SSE). There are two streams:
+
+- **A thread's stream**, `GET /v1/agents/{agentId}/threads/{threadId}/events`: one conversation as it changes, token by token. It comes in two formats: whole views (the default) and deltas.
+- **The stream of every thread**, `GET /v1/agents/events`: which threads changed, for inbox-style lists. It never wakes an agent.
+
+A trusted app can also follow everyone who connected it on one stream: see [Apps with many people](/docs/build/apps-with-many-people).
+
+## A thread's stream: whole views
+
+```sh
+curl -N https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/events -H "Authorization: Bearer $TOKEN"
+```
+
+Without `format` (or with `format=view`), the stream sends a `view` event after every change (at most about 10 a second), each carrying the **whole** conversation view:
+
+```text
+event: view
+data: {"busy":true,"messages":[…],"partial":{"text":"The release added…","thinking":""},"tools":[…]}
+```
+
+| Field | |
+|---|---|
+| `busy` | A reply is running |
+| `messages` | The transcript: `user`, `assistant` and `tool` messages ([fields](/docs/build/private-threads#message-metadata)) |
+| `partial` | The reply being written: `text` and `thinking`. Absent when no reply is being written |
+| `tools` | Tools running now: `callId`, `name`, `status` and `output` so far |
+| `earlierCursor` | With `limit` only, when earlier messages exist (see below) |
+
+Replace your view with each event's. This is simple, but every event repeats the whole transcript, so a long conversation sends a lot for each new token. For those, use deltas.
+
+## A thread's stream: deltas
+
+```sh
+curl -N "https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/events?format=delta&v=1" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+With `format=delta`, the stream sends a **snapshot** first (a conversation view, as above) and then **only what changed**. `v=1` names the format's version; it is the only one, and other values are `400 unsupported_version`. A `format` other than `view` or `delta` is `400 invalid_format`.
+
+Each event's name is its `type`, its SSE `id` is its `seq`, and its data is a JSON object with both:
+
+```text
+id: 1
+event: snapshot
+data: {"type":"snapshot","seq":1,"v":1,"view":{"busy":false,"messages":[…],"tools":[]}}
+
+id: 2
+event: message.added
+data: {"type":"message.added","seq":2,"message":{"id":"…","role":"user","text":"What changed?",…}}
+
+id: 3
+event: run
+data: {"type":"run","seq":3,"busy":true}
+
+id: 4
+event: partial.appended
+data: {"type":"partial.appended","seq":4,"text":"The release"}
+```
+
+`seq` counts up by one on each event of a connection.
+
+### Event types
+
+| Type | Fields | Apply it |
+|---|---|---|
+| `snapshot` | `v`, `view` | Replace your view with `view`. It can come again later, when the change can't be sent as a delta (the conversation was compacted or reset) |
+| `message.added` | `message` | Append `message` to `messages` |
+| `message.updated` | `message` | Replace the message with the same `id` (a tool call's end time, for instance) |
+| `partial.set` | `partial` | Set `partial` (a reply started, or started over) |
+| `partial.appended` | `text`, `thinking` (either may be absent) | Append them to `partial.text` and `partial.thinking` |
+| `partial.cleared` | | Remove `partial` (the reply became a message, or was stopped) |
+| `tool.started` | `tool`, `startedAt`, `elapsedMs` | Append `tool` to `tools` |
+| `tool.updated` | `callId`, `status`, `output` or `outputAppended`, `startedAt`, `elapsedMs` | Find the tool by `callId`: set `status` if present; `output` replaces its output (`null`: none); `outputAppended` extends it |
+| `tool.finished` | The same as `tool.updated` | The same; the status became `done` |
+| `tool.removed` | `callId` | Remove the tool with that `callId` (its round ended) |
+| `tools.set` | `tools` | Replace `tools` (rare: the list was reordered) |
+| `run` | `busy` | Set `busy` |
+
+Tool events also carry `startedAt` (Unix milliseconds) and `elapsedMs` (how long the call had run when the event was sent), so you can show a running timer. They are live metadata, not part of the view.
+
+Applying the events in order to the snapshot gives exactly the view a new snapshot would show. The reply grows by appends, so the bytes sent follow the new tokens, not the length of the conversation.
+
+### A client loop
+
+The loop reads the stream, keeps the view and the last `seq`, and applies each event. This one runs on your server (Node 22, TypeScript); a browser's `EventSource` can't send an `Authorization` header.
+
+```ts
+type Tool = { callId: string; name: string; status: string; output?: string };
+type View = {
+  busy: boolean;
+  messages: { id: string; role: string; [k: string]: unknown }[];
+  partial?: { text: string; thinking: string };
+  tools: Tool[];
+  earlierCursor?: string;
+};
+
+function apply(view: View | undefined, e: any): View | undefined {
+  if (e.type === "snapshot") return e.view;
+  if (!view) return undefined;
+  switch (e.type) {
+    case "message.added": return { ...view, messages: [...view.messages, e.message] };
+    case "message.updated": return { ...view, messages: view.messages.map((m) => (m.id === e.message.id ? e.message : m)) };
+    case "partial.set": return { ...view, partial: e.partial };
+    case "partial.appended": {
+      const p = view.partial ?? { text: "", thinking: "" };
+      return { ...view, partial: { text: p.text + (e.text ?? ""), thinking: p.thinking + (e.thinking ?? "") } };
+    }
+    case "partial.cleared": { const { partial, ...rest } = view; return rest; }
+    case "tool.started": return { ...view, tools: [...view.tools, e.tool] };
+    case "tool.updated":
+    case "tool.finished":
+      return { ...view, tools: view.tools.map((t) => {
+        if (t.callId !== e.callId) return t;
+        const next: Tool = { ...t, ...(e.status === undefined ? {} : { status: e.status }) };
+        if (e.output === null) delete next.output;
+        else if (e.output !== undefined) next.output = e.output;
+        if (e.outputAppended !== undefined) next.output = (next.output ?? "") + e.outputAppended;
+        return next;
+      }) };
+    case "tool.removed": return { ...view, tools: view.tools.filter((t) => t.callId !== e.callId) };
+    case "tools.set": return { ...view, tools: e.tools };
+    case "run": return { ...view, busy: e.busy };
+  }
+  return view; // a type this client doesn't know: ignore it
+}
+
+async function follow(url: string, token: string, render: (v: View) => void) {
+  let view: View | undefined;
+  let last = 0;
+  for (;;) {
+    try {
+      const res = await fetch(`${url}?format=delta&v=1&limit=50`, {
+        headers: { Authorization: `Bearer ${token}`, ...(last ? { "Last-Event-ID": String(last) } : {}) },
+      });
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) return; // no longer allowed: stop
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      let buffer = "";
+      for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
+        buffer += chunk;
+        let end: number;
+        while ((end = buffer.indexOf("\n\n")) >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const data = block.split("\n").filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
+          if (!data) continue; // a keep-alive comment
+          const event = JSON.parse(data);
+          if (event.type !== "snapshot" && event.seq !== last + 1) throw new Error("gap"); // reconnect
+          view = apply(view, event);
+          last = event.seq;
+          if (view) render(view);
+        }
+      }
+    } catch {
+      // A network error, a restart or a gap: reconnect below.
+    }
+    await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
+  }
+}
+```
+
+Every connection starts with a snapshot, so a reconnect always resynchronises the view. Send the last `seq` you applied as `Last-Event-ID` (a browser's `EventSource` does this itself when it reconnects): the new connection's numbering goes on after it, so your sequence keeps increasing. A gap in `seq` means you missed an event: reconnect.
+
+### Only the latest messages
+
+`limit` (1 to 200) keeps whole views and snapshots to the latest messages, with `earlierCursor` when earlier ones exist. New messages are added to that window. Load earlier messages with `GET` on the thread and `before=<earlierCursor>` ([Read a conversation page by page](/docs/build/threads-and-messages#read-a-conversation-page-by-page)), and put them before the window.
+
+`?once=true` sends the current view (or snapshot) as one event and ends: the same as `GET` on the thread.
+
+**An open stream keeps the agent awake.** Close it when nobody is looking at the conversation; in a personal workspace, open streams can hold all its `maxRunning` places.
+
+## Follow every thread at once
+
+```sh
+curl -N https://agents.example.com/v1/agents/events -H "Authorization: Bearer $TOKEN"
+```
+
+One stream for every agent the caller may use: `event: ready` first, then `event: thread` with `{agentId, threadId, deleted, thread}` whenever a thread is created, renamed, starts or finishes a reply, or is deleted. `?agentId=` limits it to one agent. It **never wakes an agent**, so use it for inbox-style lists (unread, done) and keep that state in your app. It covers shared threads and the caller's own private ones.
+
+## Keep-alives, restarts and access
+
+Every stream sends a keep-alive comment every 15 seconds and ends when the platform restarts (for example during a deploy). Reconnect with a little random delay. A slow reader may miss `thread` events: refresh a thread from `GET …/threads` if it looks stale.
+
+The platform checks the caller's access again every 30 seconds while a stream is open. A thread's stream ends when the caller is suspended, denied by the [group re-check](/docs/operate/oidc#re-checking-groups) or may no longer use the agent, or when the thread is someone else's private one. So does `GET /v1/agents/events?agentId=…`. Reconnecting is then refused like any other request. A stream of every agent stays open, but stops carrying the threads of an agent the caller can no longer use. A revoked API key, app grant or service account key doesn't end a stream that is already open.

@@ -36,7 +36,7 @@ export const tagLabels: Record<string, string> = {
   agents: 'Agents, threads and templates',
   models: 'Models and usage',
   mcp: 'MCP servers',
-  oauth: 'OAuth consent and connected apps',
+  oauth: 'OAuth Connect and apps',
 };
 
 /**

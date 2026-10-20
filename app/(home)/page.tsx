@@ -24,7 +24,7 @@ const sections = [
     title: 'Use agents',
     href: '/docs/use',
     icon: <MessageSquare />,
-    description: 'Chatting with an agent to test it, shared and private threads, your personal workspace, API keys and connected apps.',
+    description: 'Chatting with an agent to test it, shared and private threads, your personal workspace, moving an agent, API keys and connected apps.',
   },
   {
     title: 'Teams',
@@ -52,7 +52,7 @@ const sections = [
     href: '/docs/build',
     icon: <Code2 />,
     description:
-      'Reaching agents from your own app: keys and OAuth Connect, agents by key, threads, messages and events, private threads, thread MCP servers, errors and limits.',
+      'Reaching agents from your own app: keys and OAuth Connect, apps with many people, agents by key and safe retries, threads and messages, event streams, private threads, thread MCP servers, errors and limits.',
   },
   {
     title: 'API reference',

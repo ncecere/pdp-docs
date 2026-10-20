@@ -36,7 +36,7 @@ GET /v1/agents/{agentId}/threads/{threadId}/mcp-servers    # name, slug, url and
 - Up to 10 servers. Each `name` (up to 100 characters) is shown to the model and names the tools: `mcpc__<slug>__<tool>`.
 - `headers` are encrypted and kept until the server expires: a day by default, at most a week (`expiresInSeconds`). They are never returned and never forwarded in the message.
 - Sending a list replaces the thread's servers; `[]` removes them.
-- The servers go with the thread: deleting the thread deletes them.
+- The servers go with the thread: deleting the thread deletes them. So does [moving the agent](/docs/use/moving-an-agent) to another team: set them again afterwards.
 
 ## Whose thread it is
 
@@ -61,6 +61,8 @@ Reading a thread's servers takes the same access as reading the thread.
 ## How the agent uses them
 
 Before each message, the runtime fetches the thread's servers from the platform, lists their tools and offers them in that thread only. When the runtime restarts, it reinstalls every thread's servers, so a resumed reply keeps its tools.
+
+A server that uses the MCP Apps extension can mark a tool for its own interface only (`_meta.ui.visibility` without `"model"`). Such tools are never offered to the model. Pi Durable Platform doesn't show MCP Apps' interfaces yet, so the server's other tools work as plain tools.
 
 `AGENTS_CLIENT_MCP_MODE` decides how the agent reaches them: through the platform's gateway (`proxy`, the default), which adds the headers, or `direct`, where the runtime gets the URL and headers.
 

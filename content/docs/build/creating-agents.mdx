@@ -1,0 +1,48 @@
+---
+title: Creating agents safely
+description: "Retrying agent creation in Pi Durable Platform without making two agents: the Idempotency-Key header on POST /v1/teams/{team}/agents, its scope and lifetime, replays and the 422 for a reused key."
+---
+
+Creating an agent with `POST /v1/teams/{team}/agents` makes a new agent each time. If the request times out, your app can't tell whether the agent exists. Send an **`Idempotency-Key`** header, and Pi Durable Platform makes the agent once however often you retry.
+
+```sh
+curl -X POST https://agents.example.com/v1/teams/$PERSONAL/agents \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 6f1e0c3a-8d2b-4f57-9a61-0b2c7d4e5f80" \
+  -d '{"name": "Assistant", "templateId": "…", "modelId": "…"}'
+```
+
+Choose a new key for each agent you mean to create (a UUID works), and send the same key, with the same request, on every retry.
+
+## What the platform does
+
+| Request | Answer |
+|---|---|
+| A new key | The request runs as usual. If it creates the agent, the key is remembered with it |
+| The same key and the same request, within 24 hours | The first answer again: `201` with the agent as it is now, and `Idempotent-Replayed: true`. No second agent |
+| The same key and the same request, but the agent was deleted since | `404 agent_not_found`, not a new agent |
+| The same key with a different request (another body or another team) | `422 idempotency_key_reused` |
+| A malformed key | `400 invalid_idempotency_key` |
+
+- **The key**: 1 to 255 printable ASCII characters, bare or quoted (`"…"`, a structured-field string).
+- **The same request** means the same team (its slug and its ID count as the same) and the same body fields (`name`, `description`, `template`, `templateId`, `modelId`), whatever their order or spacing.
+- **Only successes are remembered.** If the request fails (`409 name_taken`, a limit, a missing template), nothing is kept, and you may retry with the same key once you've fixed the cause.
+- **Concurrent retries** wait for the first request to finish, then replay it. Two retries never both create an agent.
+- **After 24 hours** the key is forgotten and could create another agent.
+- A replayed answer still checks that the caller may see the agent.
+
+## Whose keys
+
+Keys are remembered **per caller**, so two callers never see each other's results:
+
+| Caller | Shares its keys with |
+|---|---|
+| A person (browser session or personal API key) | Their own sessions and API keys |
+| An app the person connected (OAuth Connect) | Nothing else: each connection has its own keys. An app that reconnects starts afresh |
+| A service account | Its own keys, across key rotation |
+
+Keys aren't per team: the team is part of the request, so the same key on another team is a different request (`422`).
+
+## Or ask for the agent by key
+
+To keep **one agent per purpose** (one assistant per person, say), you don't need to remember its ID: `PUT …/agents/by-key/{key}` returns the agent with that key, and creates it the first time. It works for editor service accounts in a shared team, and for a person in their own personal workspace, apps they connected included. See [Agents for your app's users](/docs/build/agents-by-key).

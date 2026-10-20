@@ -17,11 +17,11 @@ The agent gateway (port 8099, `AGENTS_GATEWAY_ADDR`) is a separate listener for 
 
 ## Conventions
 
-- **Authentication**: a browser session (cookie) reaches every operation its person may use. Bearer credentials (service account keys `pdp_sa_…`, personal API keys `pdp_…`, OAuth Connect tokens `pdpat_…`) reach the agent routes and a few readings; see [which routes take which credentials](/docs/build#which-routes-take-which-credentials).
+- **Authentication**: a browser session (cookie) reaches every operation its person may use. Bearer credentials (service account keys `pdp_sa_…`, personal API keys `pdp_…`, OAuth Connect tokens `pdpat_…`) reach the agent routes and a few readings; see [which routes take which credentials](/docs/build#which-routes-take-which-credentials). A trusted app's secret (`pdpcs_…`) reaches only `GET /v1/app/events` and `GET /v1/app/usage`.
 - **Browser writes** need `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin`.
 - **Responses** are `{"data": …}`; errors are `{"error": {"code", "message"}}`. Every response carries `X-Request-ID`.
 - **Edits** use revisions: `ETag` on reads, `If-Match` on `PATCH` and settings `PUT`s (`428` if missing, `412` if stale).
-- **Lists** of users, teams, service accounts and audit entries page with `cursor` and `limit`, and search with `q`.
+- **Lists** of users, teams, service accounts and audit entries page with `cursor` and `limit`, and search with `q`. An agent's threads do too, when you pass `limit` (without it, the whole list), and a conversation pages backwards with `limit` and `before`.
 - **Not allowed reads as not found** for agents, threads and teams the caller may not see.
 - **Rate limit**: `REQUESTS_PER_MINUTE` per person or service account, `429 rate_limited` with `Retry-After`.
 
@@ -29,6 +29,6 @@ The API may change between releases before 1.0. Each release's notes list change
 
 ## The reference
 
-The sidebar's **Management API** groups operations by area: health, sign-in, me, teams, admin, API keys, service accounts, agents (with threads and templates), models and usage, MCP servers, and OAuth consent and connected apps. Each page shows the operation's parameters, bodies, responses and example requests against `https://agents.example.com`. There's no "try it" button: the docs never call an install.
+The sidebar's **Management API** groups operations by area: health, sign-in, me, teams, admin, API keys, service accounts, agents (with threads and templates), models and usage, MCP servers, and OAuth Connect (consent, connected apps, app secrets and the app-level endpoints). Each page shows the operation's parameters, bodies, responses and example requests against `https://agents.example.com`. There's no "try it" button: the docs never call an install.
 
 The reference is generated from `openapi/pi-durable-platform.yaml`, a copy of the product's `api/openapi.yaml`, as of the release these docs describe.

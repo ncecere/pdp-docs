@@ -1,0 +1,88 @@
+---
+title: Moving an agent
+description: "Moving a Pi Durable Platform agent, with its conversations, to another team or your personal workspace: who may, what the target must offer, what stays, what stops applying, and the API's dry run."
+---
+
+You can move an agent of Pi Durable Platform, with its conversations, to another team or to your personal workspace, and back. Its storage doesn't move: only the team it belongs to changes. From then on, the new team's people and rules apply.
+
+## Who may move an agent
+
+- **On each side, an owner or admin of the team.** You need that role in both the agent's team and the target team.
+- **A personal workspace**, on either side: only its owner. You can move your own workspace's agent to a team where you're an owner or admin, or bring a team's agent into your workspace.
+- **Platform admins** may move agents between shared teams, through the API. They may move an agent into a team they are on only when they could also move it out of its own team as an owner or admin; otherwise a platform admin could read any team's conversations by moving its agent.
+- **Not service accounts**: they get `403 person_required`.
+
+**Service-managed agents don't move.** They hold an app's users' conversations, which no person of either team may read (`409 agent_service_managed`).
+
+## In the console
+
+<Steps>
+<Step>
+Open the agent, then **Settings**. In the **Danger zone**, **Move to another team** has **Move agent…**. It's disabled, with the reason, for a service-managed agent or when you aren't an owner or admin of any other team or workspace.
+</Step>
+<Step>
+In **Move to**, choose a team, or **Your personal workspace**. The list has the teams and workspaces where you are an owner or admin.
+</Step>
+<Step>
+Read what changes. The dialog shows the **Shared conversations** and who will see them, the **Private conversations**, who is **Losing access**, the **Model** the agent will run on, and, when they apply, the **External key**, **Apps' MCP servers** and **Tools** that stop applying. If something stops the move, it says **It can't move to … yet** and why.
+</Step>
+<Step>
+Choose **Move agent**. The agent's page opens in its new team.
+</Step>
+</Steps>
+
+## What the target must offer
+
+The target team must offer what the agent needs. Each missing piece stops the move, with an error code:
+
+| Code | Why | What to do |
+|---|---|---|
+| `move_template_unavailable` | The agent's template is its team's own and isn't in the catalog. A personal workspace takes catalog templates only | Publish the template to the catalog, or redeploy instead |
+| `move_model_unavailable` | The agent's model isn't one the target team may use (the old team's own model, or a model not offered to the target) | Through the API, send `modelId` to switch to a model the target may use. The console moves without changing the model |
+| `name_taken` | The target has an agent with the same name | Rename one of them |
+| `too_many_agents`, `limit_reached` | The target team (50 agents) or workspace (`maxAgents`) is full | Delete an agent there, or raise the limit |
+| `agent_service_managed` | A service-managed agent | It can't move |
+
+Archived templates are fine: a move isn't a new deployment. Other refusals: `move_same_team` (the agent is already there), `team_archived` (either team), and `404 team_not_found` for a team you aren't on.
+
+## What stays
+
+- The agent's ID, its storage (every conversation), its template version and its settings.
+- Each thread's creator, visibility and participants.
+- **Shared conversations** become the new team's: everyone who may use the agent there sees them.
+- **Private conversations** stay their creators'. If a creator isn't in the new team (a person who isn't a member, or a service account of the old team), the thread is out of reach until they join. Platform admins can still read it with a reason.
+- **Usage** already recorded stays with the old team; new usage is the new team's.
+
+## What stops applying
+
+| | After the move |
+|---|---|
+| The old team's service accounts and their keys | No longer reach the agent |
+| People of the old team who aren't in the new one | Lose the agent; their open event streams end at the next access check (30 seconds) |
+| The agent's external key | Dropped: `PUT …/agents/by-key/{key}` no longer finds it |
+| MCP servers apps set on its threads | Deleted: apps set them again |
+| The old team's own MCP servers, and platform servers published to the old team only | Stop applying: the agent gets only servers its new team may use |
+
+The agent is hibernated by the move, and starts with its new team's models and servers on its next request.
+
+The move is recorded as **Moved agent to another team** (`agent.move`) in both teams' audit logs, with the agent before and after, the thread counts, the dropped key and the number of thread MCP servers removed.
+
+## Through the API
+
+Ask what a move would do first. The dry run is authorized like the move itself and changes nothing:
+
+```sh
+curl "https://agents.example.com/v1/agents/$AGENT/move?team=research" -H "Authorization: Bearer $TOKEN"
+```
+
+It returns `allowed`, the `blockers` (each with its `code` and a `message`), and the counts and names the console shows: `sharedThreads`, `privateThreads`, `privateThreadsUnreachable`, `targetMembers`, `targetServiceAccounts`, `peopleLosingAccess`, `serviceAccountsLosingAccess`, `externalKey`, `threadMcpServers`, `mcpServersDropped` and `model`. Add `&modelId=…` to see a move that also switches the model.
+
+Then move it, with the agent's revision as `If-Match`:
+
+```sh
+curl -X POST https://agents.example.com/v1/agents/$AGENT/move \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H 'If-Match: "7"' \
+  -d '{"team": "research"}'
+```
+
+`team` is the target's slug or ID; `modelId` is optional. The answer is the agent in its new team. A blocker is a `409` with its code; a stale revision is `412 revision_conflict`. A person may use a browser session, a personal API key, or an app they connected with scope `agents`. See [moveAgent](/docs/api/reference/agents/moveAgent) and [planAgentMove](/docs/api/reference/agents/planAgentMove).

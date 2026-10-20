@@ -34,15 +34,18 @@ tags:
   description: >-
     OAuth Connect: people connect apps with their own platform identity. The platform is a small OAuth 2.1
     authorization server (its protocol endpoints, /oauth/* and /.well-known/oauth-*, are outside this document); an
-    app's access token acts as the person, without their platform role, on the routes that take bearer credentials.
-    These operations are the consent page, people's connected apps, and the trusted-app list.
+    app's access token acts as the person, without their platform role, on the routes that take bearer credentials
+    (scope agents; with agents:read alone, reads only: any other method is 403 insufficient_scope). These operations
+    are the consent page, people's connected apps, the trusted-app list and its app secrets, and the app-level
+    endpoints a trusted app calls as itself with its secret (`Authorization: Bearer pdpcs_…`): one event stream for
+    everyone who connected it, and their usage, naming people by an app-stable pseudonymous subject.
 - name: agents
   description: >-
     Durable Pi agents that teams deploy from templates, their conversations (threads) and templates. Every agent
     operation also accepts
     `Authorization: Bearer <key>`: a personal API key acts as its person; a team service account key acts in its
     team with the account's role; an app's OAuth Connect access token acts as the person who connected it (without
-    their platform role).
+    their platform role; with scope agents:read alone, only GET: anything else is 403 insufficient_scope).
 paths:
   /healthz:
     get:
@@ -75,6 +78,14 @@ paths:
         in: query
         required: false
         description: Same-origin path to return to after sign-in.
+        schema:
+          type: string
+      - name: login_hint
+        in: query
+        required: false
+        description: >-
+          Passed to the identity provider as login_hint (whom to sign in; OAuth Connect sends an app's login_hint
+          here). At most 320 characters on one line, else ignored.
         schema:
           type: string
       responses:
@@ -2380,9 +2391,14 @@ paths:
       operationId: getTeamUsage
       summary: The team's model usage, with a cost estimate (its members and service accounts, platform staff)
       description: >-
-        Requests and tokens per day, model or agent, from the platform's model proxy and from agents (direct-mode
-        providers and the platform's default model). Cost uses the models' current prices. Service-managed agents are
-        named for the team's owners and admins and its service accounts; others see them summed.
+        Requests and tokens per day, model, agent, or agent and day (`agent,day`: one row per agent per day, sorted by
+        agent name, then agent ID, then day; summed service-managed agents and deleted agents come last), from the
+        platform's model proxy and from agents (direct-mode providers and the platform's default model). Cost uses the
+        models' current prices. Service-managed agents are named for the team's owners and admins and its service
+        accounts; others see them summed. `agentId` (repeatable, up to 100) narrows the report to those agents: an ID
+        that is not one of the team's agents the caller may see (another team's, a deleted or unknown agent, or a
+        service-managed agent for a caller who sees them summed) matches nothing, so the report never shows another
+        team's usage nor reveals whether such an agent exists.
       parameters:
       - name: from
         in: query
@@ -2400,14 +2416,19 @@ paths:
         in: query
         schema:
           type: string
-          enum: [day, model, agent]
+          enum: [day, model, agent, 'agent,day']
           default: day
       - name: agentId
         in: query
+        style: form
+        explode: true
         schema:
-          type: string
-          format: uuid
-        description: Only this agent
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        description: Only these agents (repeat the parameter for several, at most 100)
       responses:
         '200':
           description: The report
@@ -2453,6 +2474,14 @@ paths:
           type: string
           enum: [day, team, model]
           default: day
+      - name: clientId
+        in: query
+        description: >-
+          Only usage attributed to this connected app (its client_id; see GET /v1/admin/oauth-clients): model requests
+          an agent made while answering a message sent through the app's token (DESIGN.md › OAuth Connect).
+        schema:
+          type: string
+          maxLength: 500
       responses:
         '200':
           description: The report
@@ -3283,7 +3312,7 @@ paths:
       - agents
       operationId: listTeamAgents
       summary: The team's agents (members and the team's service accounts; platform staff read any team's)
-      description: Service-managed agents (with an external key) are included with includeManaged=true, for the team's owners, admins and service accounts, and platform staff. Platform admins and auditors see any team's agents (settings and status, not conversations).
+      description: Service-managed agents (serviceManaged) are included with includeManaged=true, for the team's owners, admins and service accounts, and platform staff. Platform admins and auditors see any team's agents (settings and status, not conversations).
       parameters:
       - name: includeManaged
         in: query
@@ -3312,7 +3341,14 @@ paths:
       - agents
       operationId: createTeamAgent
       summary: Create a team agent from a template (team editors and above)
-      description: 409 name_taken (names are unique within the team, ignoring case); 409 team_archived; 404 template_not_found. At most 50 per team.
+      description: >-
+        409 name_taken (names are unique within the team, ignoring case); 409 team_archived; 404 template_not_found.
+        At most 50 per team. With an Idempotency-Key, a retry returns the agent the first request created (201, with
+        Idempotent-Replayed: true) instead of creating another; the same key with a different request is 422
+        idempotency_key_reused. Keys are remembered for 24 hours per caller: a person (browser session or personal
+        API key), an app the person connected (each connection separately), or a service account.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
         required: true
         content:
@@ -3321,10 +3357,12 @@ paths:
               $ref: '#/components/schemas/AgentCreate'
       responses:
         '201':
-          description: Created
+          description: Created (or, with Idempotent-Replayed, created by an earlier request with the same Idempotency-Key)
           headers:
             ETag:
               $ref: '#/components/headers/ETag'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
           content:
             application/json:
               schema:
@@ -3342,13 +3380,15 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '409':
           $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
   /v1/teams/{team}/agents/by-key/{externalKey}:
     parameters:
     - $ref: '#/components/parameters/TeamParam'
     - name: externalKey
       in: path
       required: true
-      description: The service's own key for the agent, for example its user's ID
+      description: The caller's own key for the agent, for example a user's ID or a purpose
       schema:
         type: string
         pattern: '^[A-Za-z0-9._:@-]{1,200}$'
@@ -3356,12 +3396,16 @@ paths:
       tags:
       - agents
       operationId: ensureTeamAgentByKey
-      summary: The team's service-managed agent with this key, created the first time (editor service accounts)
+      summary: The agent with this key, created the first time (editor service accounts in their team; a person in their own personal workspace)
       description: >-
-        Idempotent; 201 when it was created. For services that give each of their users an agent, such as a chat
-        app. Service-managed agents are used only by the team's service accounts: the team's people don't see their
-        conversations, though its owners and admins can delete them. The body names a new agent and is ignored for
-        an existing one.
+        Idempotent; 201 when it was created. The body names a new agent and is ignored for an existing one. In a
+        shared team, for services that give each of their users an agent, such as a chat app: only editor service
+        accounts call it, and the agent is service-managed (serviceManaged), used only by the team's service
+        accounts; the team's people don't see its conversations, though its owners and admins can delete it. In a
+        personal workspace, its owner calls it (a browser session, a personal API key, or an app the owner
+        connected), so an app can keep one agent per purpose for a person: the agent is the workspace's like any
+        other, not service-managed. Anyone else is refused (403 forbidden in a shared team, 404 team_not_found in
+        another person's workspace).
       requestBody:
         required: false
         content:
@@ -3516,6 +3560,103 @@ paths:
                     $ref: '#/components/schemas/Ok'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/move:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    get:
+      tags:
+      - agents
+      operationId: planAgentMove
+      summary: What moving the agent to another team would change (a dry run; who may move it)
+      description: >-
+        Authorized like the move itself. 200 with allowed false and the blockers when the move would be refused for
+        what it needs in the target team (its template, its model, a free name, room under the team's limits).
+      parameters:
+      - name: team
+        in: query
+        required: true
+        description: The target team's slug or ID
+        schema:
+          type: string
+      - name: modelId
+        in: query
+        required: false
+        description: A model to switch to as part of the move (one the target team may use)
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: The plan
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentMovePlan'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - agents
+      operationId: moveAgent
+      summary: Move the agent, with its conversations, to another team or workspace (owners and admins of both; platform admins between shared teams)
+      description: >-
+        A person (browser session, personal API key or an app they connected; never a service account) who is an
+        owner or admin of both teams, or a platform admin between shared teams (not into a team they are a member
+        of unless they may move it out of its team). A personal workspace on either side: its owner only. The agent
+        keeps its schema, template version and conversations; its record now belongs to the target team, whose
+        rules apply from then on. Its template and model must be available to the target team (409
+        move_template_unavailable, move_model_unavailable; modelId switches the model), its name free there (409
+        name_taken), and the team below its limits (409 too_many_agents, limit_reached). Service-managed agents
+        don't move (409 agent_service_managed). Its external key, the MCP servers apps set on its threads, and the
+        old team's MCP servers, service accounts and models stop applying; usage stays with the team it happened in.
+        The runtime is stopped and starts with the new team's configuration on the next request. Audited in both
+        teams' logs (agent.move).
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentMove'
+      responses:
+        '200':
+          description: Moved
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
   /v1/agents/{agentId}/threads:
     parameters:
     - $ref: '#/components/parameters/AgentIdParam'
@@ -3528,6 +3669,26 @@ paths:
         From the platform's record of each thread, kept as messages are relayed and as the agent reports replies
         ending. A thread whose agent has not run since this record began appears after the agent's next start. Shared
         threads and the caller's own private ones; others' private threads are never listed.
+        Paging is opt-in: without `limit` the reply is the whole list. With `limit` it is one page (newest activity
+        first) and `nextCursor`, next to `data`, when more follow; pass it back as `cursor` with the same `q`. `q`
+        filters by title (case-insensitive substring), with or without `limit`.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        description: Page size (1-200). Without it, every thread.
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - name: cursor
+        in: query
+        required: false
+        description: nextCursor from the previous page (opaque; a malformed one is 400 invalid_cursor)
+        schema:
+          type: string
+          maxLength: 512
+      - $ref: '#/components/parameters/SearchParam'
       responses:
         '200':
           description: Threads
@@ -3542,6 +3703,11 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/AgentThread'
+                  nextCursor:
+                    type: string
+                    description: Only with `limit`, when more threads follow
+        '400':
+          $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
         '409':
@@ -3628,6 +3794,28 @@ paths:
       - agents
       operationId: getAgentThread
       summary: A conversation's transcript and the reply in progress
+      description: >-
+        Without `limit` and `before`, the whole transcript. With either, one page of messages going backwards: the
+        `limit` (default 50) messages before the one `before` names (the latest when absent), and `earlierCursor`
+        when earlier messages exist (pass it as `before`). A page never starts with a tool result (it then also holds
+        the reply that made the call). A cursor whose message has left the conversation's view (compacted or reset)
+        gives an empty page. The reply in progress and the tools are always the current ones.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        description: Messages per page (1-200, default 50 when `before` is given)
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - name: before
+        in: query
+        required: false
+        description: earlierCursor from the previous page (opaque; a malformed one is 400 invalid_cursor)
+        schema:
+          type: string
+          maxLength: 64
       responses:
         '200':
           description: The conversation
@@ -3640,6 +3828,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/ChatView'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
         '409':
@@ -3678,7 +3868,10 @@ paths:
       - agents
       operationId: sendAgentMessage
       summary: Send a message (creates the thread on first use)
-      description: Accepted, not answered; follow the thread's events for the reply. While the agent is busy the message runs after the current reply. A repeated requestId is not submitted twice.
+      description: >-
+        Accepted, not answered; follow the thread's events for the reply. While the agent is busy the message runs
+        after the current reply (`whenBusy: followUp`, the default) or steers it (`whenBusy: steer`). A repeated
+        requestId is not submitted twice.
       requestBody:
         required: true
         content:
@@ -3742,15 +3935,56 @@ paths:
       operationId: streamAgentThread
       summary: Server-sent events with the conversation's view after every change
       description: |-
-        Each `view` event's data is a ChatView (JSON). The stream keeps the agent awake while open. Access is checked
-        again every 30 seconds: the stream ends when the caller is no longer active (suspended, or denied by the
-        group re-check), may no longer use the agent, or the thread is another's private one.
+        Each `view` event's data is a ChatView (JSON), sent after every change (at most 10 a second). The stream keeps
+        the agent awake while open. Access is checked again every 30 seconds: the stream ends when the caller is no
+        longer active (suspended, or denied by the group re-check), may no longer use the agent, or the thread is
+        another's private one.
+
+        `format=delta` (version `v=1`, the only one) sends changes instead of whole views: a `snapshot` event first
+        (a ChatView), then events for what changed, each a ChatDeltaEvent whose `type` is also the event's name and
+        whose `seq` (also the event's `id`) counts up by one. Types: `message.added`, `message.updated` (replace the
+        message with that id), `partial.set`, `partial.appended` (text and thinking to append to the reply in
+        progress), `partial.cleared`, `tool.started`, `tool.updated` and `tool.finished` (status, `outputAppended` or
+        `output`; null: none), `tool.removed`, `tools.set`, and `run` (`busy`). Tool events carry `startedAt` and
+        `elapsedMs` (live metadata, not part of the view). Applying the events in order to the snapshot gives the
+        view a new snapshot would; whatever can't be sent as a change (the conversation was compacted or reset) comes
+        as a new snapshot. Every connection starts with a snapshot; with `Last-Event-ID` (EventSource sends it when it
+        reconnects) its numbering goes on after that ID. A steering message is a `message.added` (a user message)
+        after the tool results of the reply it steers, before that reply's next answer.
+
+        `limit` keeps whole views and snapshots to the latest messages, with `earlierCursor` for the earlier ones
+        (`GET` the thread with `before`); new messages are added to the window.
       parameters:
       - name: once
         in: query
-        description: Send the current view as one event, then end the stream
+        description: Send the current view (or snapshot) as one event, then end the stream
         schema:
           type: boolean
+      - name: format
+        in: query
+        description: view (default) for whole views, delta for a snapshot and then changes
+        schema:
+          type: string
+          enum: [view, delta]
+      - name: v
+        in: query
+        description: The delta format's version (1); other values are 400 unsupported_version
+        schema:
+          type: integer
+          enum: [1]
+      - name: limit
+        in: query
+        description: Only the latest messages (1-200) in views and snapshots
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - name: Last-Event-ID
+        in: header
+        required: false
+        description: The last delta event a reconnecting client applied; the new stream's numbering goes on after it
+        schema:
+          type: string
       responses:
         '200':
           description: An event stream
@@ -3773,7 +4007,9 @@ paths:
       description: >-
         The query is the authorization request the app sent to /oauth/authorize, unchanged (the platform redirects the
         browser to the web app's /connect/consent with it). A request that isn't valid is a 400 whose code starts with
-        oauth_ (the page shows the reason and never sends the browser anywhere).
+        oauth_ (the page shows the reason and never sends the browser anywhere). When the request's login_hint isn't the
+        signed-in person (their email or identity provider subject), accountMismatch is true: the page offers to sign
+        out and sign in as the hinted account, or to cancel, and allowing is refused (409 account_mismatch).
       parameters:
       - name: client_id
         in: query
@@ -3815,6 +4051,16 @@ paths:
         required: false
         schema:
           type: string
+      - name: prompt
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: login_hint
+        in: query
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: The app, where it will send the person back, and what it asks for
@@ -3839,8 +4085,10 @@ paths:
       operationId: decideOAuthConsent
       summary: Allow or deny an app's authorization request; returns where to send the browser
       description: >-
-        Allowing records the person's consent (a connected app, remembered until revoked) and returns the app's
-        redirect URI with an authorization code; denying returns it with error=access_denied.
+        Allowing records the person's consent (a connected app, remembered until revoked; a grant of agents:read
+        widens to agents when the app asks for it) and returns the app's redirect URI with an authorization code;
+        denying returns it with error=access_denied. Allowing a request whose login_hint isn't the signed-in person is
+        409 account_mismatch.
       requestBody:
         required: true
         content:
@@ -3965,6 +4213,208 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '404':
           $ref: '#/components/responses/ErrorReply'
+  /v1/app/events:
+    get:
+      tags:
+      - oauth
+      operationId: getAppEvents
+      summary: Server-sent events for the threads of everyone who connected the calling app (trusted apps, with their secret)
+      description: >-
+        Authenticated as the app itself: `Authorization: Bearer <app secret>` (pdpcs_…, issued by a platform admin to a
+        trusted app; never a person's token). `event: ready` first, then `event: thread` (an AppThreadEvent) whenever a
+        thread changes that one or more of the app's people may see, with their subjects. The people are those with an
+        active connection to the app (any scope; a connection whose refresh token expired or that was revoked counts no
+        more, from the next change on) who are active (not suspended or denied by the group re-check), and each sees
+        what their own GET /v1/agents/events through the app would show: agents of teams they are members of (no
+        platform staff reads, never service-managed agents), shared threads and their own private ones, reserved
+        threads only their own. `once=true` sends `ready` and ends. A keep-alive comment comes every 15 seconds. Every
+        30 seconds the stream checks that its secret still exists and its app is still trusted, and ends otherwise
+        (the reconnect is then 401). A slow reader misses events; reconnect and re-list after a gap.
+      parameters:
+      - name: once
+        in: query
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: The stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/app/usage:
+    get:
+      tags:
+      - oauth
+      operationId: getAppUsage
+      summary: Usage of the people who connected the calling app, by person and day (trusted apps, with their secret)
+      description: >-
+        Authenticated as the app itself (`Authorization: Bearer <app secret>`). Model requests and tokens (with a cost
+        estimate at the models' current prices) and tool calls an agent made while answering a message sent through
+        the app's tokens, by person (subject) and UTC day, ordered by day then subject, paged with cursor. Includes
+        people who have since disconnected the app. Attribution is conservative: work of an agent that, at that moment,
+        was answering people through different apps (or not through an app) is not counted for any app (DESIGN.md ›
+        OAuth Connect).
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+        description: First day (UTC), default 6 days before `to`
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Last day (UTC, inclusive), default today; at most 92 days after from
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 200
+      responses:
+        '200':
+          description: A page of usage
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AppUsagePage'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/oauth-clients:
+    get:
+      tags:
+      - oauth
+      - admin
+      operationId: adminListConnectedApps
+      summary: The apps people have connected, most people first (platform admins and auditors)
+      responses:
+        '200':
+          description: Connected apps
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConnectedApp'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/oauth-clients/secrets:
+    get:
+      tags:
+      - oauth
+      - admin
+      operationId: adminListAppSecrets
+      summary: Trusted apps' secrets, never the secrets themselves (platform admins and auditors)
+      responses:
+        '200':
+          description: App secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AppSecret'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - oauth
+      - admin
+      operationId: adminCreateAppSecret
+      summary: Issue a secret to a trusted app, shown once (platform admins)
+      description: >-
+        The secret authenticates the app on the app-level endpoints (GET /v1/app/events and /v1/app/usage) while it is
+        on the trusted list. At most two per app, to rotate: issue a new one, move the app to it, delete the old one
+        (409 too_many_secrets when there are two). 422 client_not_trusted: the app isn't on the trusted list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppSecretCreate'
+      responses:
+        '201':
+          description: The secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AppSecretCreated'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/settings/oauth-clients/secrets/{secretId}:
+    parameters:
+    - name: secretId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      tags:
+      - oauth
+      - admin
+      operationId: adminDeleteAppSecret
+      summary: Delete a trusted app's secret; it stops working at once (platform admins)
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
   /v1/admin/users/{userId}/oauth-grants:
     parameters:
     - $ref: '#/components/parameters/UserIdParam'
@@ -4051,7 +4501,9 @@ paths:
       summary: Replace the trusted apps (platform admins)
       description: >-
         Only apps identified by a Client ID Metadata Document (an https URL with a path) can be trusted: a registered
-        app's ID changes, and anyone can register any name. A trusted app skips the consent screen, never the sign-in.
+        app's ID changes, and anyone can register any name. A trusted app skips the consent screen, never the sign-in
+        (nor the login_hint account check). Only a trusted app can have app secrets (GET /v1/app/events and
+        /v1/app/usage): taking an app off the list stops its secrets at once.
       parameters:
       - $ref: '#/components/parameters/IfMatchHeader'
       requestBody:
@@ -4093,6 +4545,11 @@ components:
       description: Quoted revision, for If-Match on the next update
       schema:
         type: string
+    IdempotentReplayed:
+      description: '"true" when the answer is an earlier request''s with the same Idempotency-Key'
+      schema:
+        type: string
+        enum: ['true']
   parameters:
     McpServerIdParam:
       name: serverId
@@ -4208,6 +4665,17 @@ components:
       description: nextCursor from the previous page
       schema:
         type: string
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        A key the client chooses for one request (a UUID, for example), so a retry doesn't repeat it
+        (draft-ietf-httpapi-idempotency-key-header). 1-255 printable ASCII characters, optionally quoted as a
+        structured-field string. Invalid: 400 invalid_idempotency_key.
+      schema:
+        type: string
+        maxLength: 257
     IfMatchHeader:
       name: If-Match
       in: header
@@ -4644,7 +5112,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Absent when grouped by agent - a deleted agent, or service-managed agents summed
+          description: Absent when grouped by agent (or agent and day) - a deleted agent, or service-managed agents summed
         agentName:
           type: string
           nullable: true
@@ -4696,7 +5164,7 @@ components:
           format: date
         groupBy:
           type: string
-          enum: [day, model, agent, team]
+          enum: [day, model, agent, team, 'agent,day']
         rows:
           type: array
           items:
@@ -5233,7 +5701,7 @@ components:
           description: Shown to the team when rejected
     Agent:
       type: object
-      required: [id, name, description, teamId, teamSlug, teamName, templateId, templateSlug, templateName, templateVersion, templateCurrentVersion, enabled, running, revision, createdAt, updatedAt]
+      required: [id, name, description, teamId, teamSlug, teamName, templateId, templateSlug, templateName, templateVersion, templateCurrentVersion, serviceManaged, enabled, running, revision, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -5267,7 +5735,12 @@ components:
         externalKey:
           type: string
           nullable: true
-          description: Set for service-managed agents (created by a service account with its own key)
+          description: The key it was ensured with (PUT .../agents/by-key/{key}), if any
+        serviceManaged:
+          type: boolean
+          description: >-
+            An app's agent for one of its users (made by a service account with an external key, in a shared team):
+            only the team's service accounts use it. An agent with a key in a personal workspace is not.
         enabled:
           type: boolean
         running:
@@ -5332,6 +5805,106 @@ components:
           type: string
           format: uuid
           description: For a new agent, a model published to the team (default the template's)
+    AgentMove:
+      type: object
+      required: [team]
+      properties:
+        team:
+          type: string
+          description: The target team's slug or ID
+        modelId:
+          type: string
+          format: uuid
+          description: A model to switch to as part of the move (one the target team may use); default the agent's
+    AgentMoveTeam:
+      type: object
+      required: [id, slug, name, kind]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [team, personal]
+    AgentMoveBlocker:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: The error code the move would be refused with
+          example: move_template_unavailable
+        message:
+          type: string
+    AgentMovePlan:
+      type: object
+      required: [agentId, from, to, allowed, blockers, sharedThreads, privateThreads, privateThreadsUnreachable, targetMembers,
+        targetServiceAccounts, peopleLosingAccess, serviceAccountsLosingAccess, threadMcpServers, mcpServersDropped]
+      properties:
+        agentId:
+          type: string
+          format: uuid
+        from:
+          $ref: '#/components/schemas/AgentMoveTeam'
+        to:
+          $ref: '#/components/schemas/AgentMoveTeam'
+        allowed:
+          type: boolean
+          description: Whether the move would be done now (no blockers)
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMoveBlocker'
+        sharedThreads:
+          type: integer
+          format: int64
+          description: Shared threads, which everyone who may use the agent in the target team will see
+        privateThreads:
+          type: integer
+          format: int64
+          description: Private threads; they stay their creator's
+        privateThreadsUnreachable:
+          type: integer
+          format: int64
+          description: Private threads whose creator can't use the agent in the target team (a service account, or a person who isn't a member)
+        targetMembers:
+          type: integer
+          format: int64
+          description: People in the target team (who may use the agent after the move)
+        targetServiceAccounts:
+          type: integer
+          format: int64
+          description: The target team's service accounts (who may use the agent after the move)
+        peopleLosingAccess:
+          type: integer
+          format: int64
+          description: People of the current team who aren't in the target team
+        serviceAccountsLosingAccess:
+          type: integer
+          format: int64
+          description: The current team's service accounts, whose keys no longer reach the agent
+        externalKey:
+          type: string
+          nullable: true
+          description: The agent's key, dropped by the move (PUT .../agents/by-key/{key} no longer finds it)
+        threadMcpServers:
+          type: integer
+          format: int64
+          description: MCP servers apps set on its threads, removed by the move
+        mcpServersDropped:
+          type: array
+          description: Names of its template version's MCP servers that the target team may not use (they stop applying)
+          items:
+            type: string
+        model:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/AgentModel'
+          description: The model it would run on in the target team (absent - the platform's default model)
     AgentUpdate:
       type: object
       properties:
@@ -5537,6 +6110,14 @@ components:
             The thread's visibility, chosen with its first message (default shared). On a later message it may be
             omitted; a different value is refused (409 visibility_fixed). The message's author is always the caller:
             author fields a client sends are ignored.
+        whenBusy:
+          type: string
+          enum: [followUp, steer]
+          description: >-
+            While a reply is running: followUp (the default) waits for it to end and starts the next one; steer joins it, placed
+            after its current tool round (or its answer) so the model sees it before going on. The transcript shows a
+            steering message where it was placed: after the tool results of the reply it changed. No effect on an
+            idle thread.
     AgentMessageAccepted:
       type: object
       required: [submissionId]
@@ -5681,6 +6262,69 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChatToolSlot'
+        earlierCursor:
+          type: string
+          description: Paged reads only; pass it as `before` for the earlier messages (absent when there are none)
+    ChatDeltaEvent:
+      type: object
+      required: [type, seq]
+      description: >-
+        One event of a thread's delta stream (`format=delta`, version 1). Which fields are set depends on `type`;
+        see the stream's description.
+      properties:
+        type:
+          type: string
+          enum: [snapshot, message.added, message.updated, partial.set, partial.appended, partial.cleared, tool.started,
+            tool.updated, tool.finished, tool.removed, tools.set, run]
+        seq:
+          type: integer
+          format: int64
+        v:
+          type: integer
+          description: The format's version (snapshot)
+        view:
+          $ref: '#/components/schemas/ChatView'
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        partial:
+          type: object
+          required: [text, thinking]
+          properties:
+            text:
+              type: string
+            thinking:
+              type: string
+        text:
+          type: string
+          description: partial.appended
+        thinking:
+          type: string
+          description: partial.appended
+        tool:
+          $ref: '#/components/schemas/ChatToolSlot'
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatToolSlot'
+        callId:
+          type: string
+        status:
+          type: string
+        output:
+          type: string
+          nullable: true
+        outputAppended:
+          type: string
+        startedAt:
+          type: integer
+          format: int64
+          description: When the tool call started (Unix milliseconds)
+        elapsedMs:
+          type: integer
+          format: int64
+          description: How long the tool call had run when the event was sent
+        busy:
+          type: boolean
     AuditActor:
       type: object
       description: Who made the change, resolved when the log is read
@@ -5997,6 +6641,29 @@ components:
           type: string
         capabilities:
           $ref: '#/components/schemas/Capabilities'
+        connectedApp:
+          $ref: '#/components/schemas/ConnectedAppRef'
+    ConnectedAppRef:
+      type: object
+      description: Present when the caller is an app's OAuth Connect token
+      required:
+      - clientId
+      - subject
+      - scopes
+      properties:
+        clientId:
+          type: string
+        subject:
+          type: string
+          format: uuid
+          description: >-
+            The person's app-stable pseudonymous ID for this app (the same in the token response's subject, the app
+            event stream and app usage); it stays when they disconnect and connect again.
+        scopes:
+          type: array
+          items:
+            type: string
+          description: The token's scopes (agents, or agents:read)
     Member:
       type: object
       required:
@@ -6657,13 +7324,22 @@ components:
           type: string
         scopes:
           type: array
+          description: What the app asks for (agents, or agents:read alone)
           items:
             type: string
         remembered:
           type: boolean
-          description: The person already allowed this app
+          description: The person already allowed this app, for these scopes
         personalWorkspace:
           $ref: '#/components/schemas/PersonalWorkspaceRef'
+        loginHint:
+          type: string
+          description: The account the app expects (its login_hint), when it sent one
+        accountMismatch:
+          type: boolean
+          description: >-
+            The login_hint isn't the signed-in person: allowing is refused; sign out and sign in as the hinted account,
+            or cancel
     OAuthConsentDecision:
       type: object
       required:
@@ -6703,6 +7379,7 @@ components:
           $ref: '#/components/schemas/OAuthClientInfo'
         scopes:
           type: array
+          description: What the person allowed (agents, or agents:read alone for a read-only connection)
           items:
             type: string
         createdAt:
@@ -6751,3 +7428,149 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/TrustedClient'
+    AppThreadEvent:
+      type: object
+      description: >-
+        A thread change on the app-level event stream, for the people (subjects) who may see it, by the rules of their
+        own GET /v1/agents/events through the app.
+      required: [subjects, agentId, threadId, deleted]
+      properties:
+        subjects:
+          type: array
+          description: The app-stable subjects of the people who connected the app and may see this change
+          items:
+            type: string
+            format: uuid
+        agentId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+        deleted:
+          type: boolean
+        thread:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/AgentThread'
+          description: The thread now (absent when deleted)
+    AppUsageRow:
+      type: object
+      required: [day, subject, requests, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costUsd, unpricedRequests, toolCalls]
+      properties:
+        day:
+          type: string
+          format: date
+        subject:
+          type: string
+          format: uuid
+          description: The person's app-stable subject
+        requests:
+          type: integer
+          format: int64
+          description: Model requests
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        cacheReadTokens:
+          type: integer
+          format: int64
+        cacheWriteTokens:
+          type: integer
+          format: int64
+        costUsd:
+          type: number
+          format: double
+          description: Estimate at the models' current prices
+        unpricedRequests:
+          type: integer
+          format: int64
+          description: Requests of models without prices (not in costUsd)
+        toolCalls:
+          type: integer
+          format: int64
+          description: Tool calls through the platform's MCP proxy
+    AppUsagePage:
+      type: object
+      required: [from, to, rows]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppUsageRow'
+        nextCursor:
+          type: string
+          description: Pass as cursor for the next page (absent on the last one)
+    ConnectedApp:
+      type: object
+      description: An app people have connected (active connections)
+      required: [clientId, name, kind, people, lastActiveAt, trusted]
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+          description: Its name as the newest consent saw it
+        kind:
+          type: string
+          enum:
+          - metadata
+          - registered
+        people:
+          type: integer
+          format: int64
+          description: People with an active connection
+        lastActiveAt:
+          type: string
+          format: date-time
+          description: Its latest use (else connection)
+        trusted:
+          type: boolean
+    AppSecret:
+      type: object
+      description: A trusted app's secret, without the secret
+      required: [id, clientId, prefix, createdAt, trusted]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+        prefix:
+          type: string
+          description: The secret's first characters, to tell it apart
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+        trusted:
+          type: boolean
+          description: Its app is on the trusted list now (the secret works only then)
+    AppSecretCreated:
+      allOf:
+      - $ref: '#/components/schemas/AppSecret'
+      - type: object
+        required: [secret]
+        properties:
+          secret:
+            type: string
+            description: The secret (pdpcs_…), shown this once
+    AppSecretCreate:
+      type: object
+      required: [clientId]
+      properties:
+        clientId:
+          type: string
+          maxLength: 500
+          description: A trusted app's client_id
