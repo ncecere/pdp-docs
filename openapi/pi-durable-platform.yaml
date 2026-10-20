@@ -39,6 +39,12 @@ tags:
     are the consent page, people's connected apps, the trusted-app list and its app secrets, and the app-level
     endpoints a trusted app calls as itself with its secret (`Authorization: Bearer pdpcs_…`): one event stream for
     everyone who connected it, and their usage, naming people by an app-stable pseudonymous subject.
+- name: triggers
+  description: >-
+    Schedules and webhooks that start runs of an agent without a person (docs/triggers.md) - each fire sends a
+    message to a thread, under limits (runs at once, run time, daily budgets, pauses, back-off), recorded as a run
+    with its cost, and optionally reported to a signed completion callback. Owners and admins manage them in a
+    browser session; everyone who may use the agent reads them.
 - name: agents
   description: >-
     Durable Pi agents that teams deploy from templates, their conversations (threads) and templates. Every agent
@@ -767,6 +773,52 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorReply'
         '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/admin/agents/{agentId}/threads/{threadId}/documents/{kind}/read:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/ThreadIdParam'
+    - $ref: '#/components/parameters/DocumentKindParam'
+    post:
+      tags:
+      - admin
+      operationId: adminReadAgentThreadDocument
+      summary: Read an exposed document of any conversation, with a reason (platform admins)
+      description: >-
+        A document is part of the conversation: platform admins read it only this way, like the conversation itself
+        (adminReadAgentThread). Each read is recorded as thread.admin_read in the agent's team's audit log, with the
+        reason, the document's kind and the outcome (read, not_found, failed), before it is answered, whether it found
+        a document or not. A thread the agent doesn't have and a kind it doesn't expose are the same 404
+        document_not_found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminThreadRead'
+      responses:
+        '200':
+          description: The document
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ThreadDocument'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '502':
           $ref: '#/components/responses/ErrorReply'
   /v1/admin/agents/{agentId}/threads/{threadId}/read:
     parameters:
@@ -3034,6 +3086,148 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '409':
           $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/approvals:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    get:
+      tags:
+      - agents
+      operationId: listAgentApprovals
+      summary: The agent's tool approvals the caller may see, newest first
+      description: >-
+        Requests to approve a tool call (docs/approvals.md) in the agent's threads the caller may read: shared threads,
+        and their own private ones. Anyone who may use the agent sees them; `canDecide` says whether the caller may
+        decide one.
+      parameters:
+      - name: thread
+        in: query
+        required: false
+        description: One thread's only
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+      - name: status
+        in: query
+        required: false
+        description: 'pending (default), decided (approved, denied, timed out or cancelled) or all'
+        schema:
+          type: string
+          enum: [pending, decided, all]
+      - name: limit
+        in: query
+        required: false
+        description: At most this many (1-200, default 100)
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      responses:
+        '200':
+          description: Approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolApproval'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/approvals/{approvalId}:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/ApprovalIdParam'
+    get:
+      tags:
+      - agents
+      operationId: getAgentApproval
+      summary: One tool approval
+      responses:
+        '200':
+          description: The approval
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ToolApproval'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - agents
+      operationId: decideAgentApproval
+      summary: Approve or deny a pending tool call
+      description: >-
+        Records the decision (audited) and delivers it to the agent, waking it if it is hibernated: an approved call
+        runs, a denied one isn't run and the model is told, with the reason. Who may decide: the thread's creator for a
+        private thread; for a shared thread, the person (or service account) whose message started the run, the team's
+        owners and admins, and members whose role is at least the version's approval role; for an unattended run, the
+        team's owners and admins. Platform staff can't. 403 approval_forbidden for someone who may see but not decide;
+        409 approval_decided once decided, timed out or cancelled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolApprovalDecision'
+      responses:
+        '200':
+          description: The decided approval
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ToolApproval'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/me/approvals:
+    get:
+      tags:
+      - me
+      operationId: listMyApprovals
+      summary: 'The inbox: pending tool approvals the caller may decide, across agents'
+      responses:
+        '200':
+          description: Approvals, newest first (at most 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolApproval'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
   /v1/agents/events:
     get:
       tags:
@@ -3859,6 +4053,48 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '503':
           $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/threads/{threadId}/documents/{kind}:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/ThreadIdParam'
+    - $ref: '#/components/parameters/DocumentKindParam'
+    get:
+      tags:
+      - agents
+      operationId: getAgentThreadDocument
+      summary: A document the agent exposes to apps, as the conversation has it now
+      description: >-
+        Custom agents keep state next to the transcript in documents (docs/custom-agents.md); a conversation document
+        the agent's author marked as exposed can be read here, with exactly the access reading the thread needs
+        (another's private thread is not found; platform staff use adminReadAgentThreadDocument). Wakes the agent like
+        any read. The thread's view lists the exposed documents it has (`documents`, kind to revision), and its event
+        streams say when one changes (`document.updated` in the delta format, a new revision in whole views). A kind
+        the agent doesn't expose, or the thread doesn't have, is 404 document_not_found; one larger than its author's
+        bound is 422 document_too_large (never cut).
+      responses:
+        '200':
+          description: The document
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ThreadDocument'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '502':
+          $ref: '#/components/responses/ErrorReply'
+        '503':
+          $ref: '#/components/responses/ErrorReply'
   /v1/agents/{agentId}/threads/{threadId}/messages:
     parameters:
     - $ref: '#/components/parameters/AgentIdParam'
@@ -3945,8 +4181,9 @@ paths:
         whose `seq` (also the event's `id`) counts up by one. Types: `message.added`, `message.updated` (replace the
         message with that id), `partial.set`, `partial.appended` (text and thinking to append to the reply in
         progress), `partial.cleared`, `tool.started`, `tool.updated` and `tool.finished` (status, `outputAppended` or
-        `output`; null: none), `tool.removed`, `tools.set`, and `run` (`busy`). Tool events carry `startedAt` and
-        `elapsedMs` (live metadata, not part of the view). Applying the events in order to the snapshot gives the
+        `output`; null: none, and `details`, `detailsOmitted`), `tool.removed`, `tools.set`, `run` (`busy`), and
+        `document.updated` (`kind`, `revision`: an exposed document changed; read it with getAgentThreadDocument).
+        Tool events carry `startedAt` and `elapsedMs` (live metadata, not part of the view). Applying the events in order to the snapshot gives the
         view a new snapshot would; whatever can't be sent as a change (the conversation was compacted or reset) comes
         as a new snapshot. Every connection starts with a snapshot; with `Last-Event-ID` (EventSource sends it when it
         reconnects) its numbering goes on after that ID. A steering message is a `message.added` (a user message)
@@ -4542,6 +4779,454 @@ paths:
           $ref: '#/components/responses/ErrorReply'
         '428':
           $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/triggers:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    get:
+      tags:
+      - triggers
+      operationId: listAgentTriggers
+      summary: The agent's triggers (everyone who may use the agent, platform staff); never their secrets
+      responses:
+        '200':
+          description: Triggers, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Trigger'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    post:
+      tags:
+      - triggers
+      operationId: createAgentTrigger
+      summary: Add a schedule or a webhook to the agent (its team's owners and admins, in a browser session)
+      description: >-
+        A webhook gets its address (`webhookUrl`) and secret; a callback URL gets a callback secret. Secrets are in this
+        answer only. At most 50 triggers per agent; service-managed agents take none.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerCreate'
+            example:
+              kind: schedule
+              name: Daily digest
+              cron: 0 8 * * 1-5
+              timezone: Europe/Paris
+              missedPolicy: run_once
+              messageTemplate: Summarise yesterday's new issues for the team.
+              callbackUrl: https://hooks.example.com/pdp
+      responses:
+        '201':
+          description: Created, with its secrets (shown once)
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerSaved'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/triggers/{triggerId}:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/TriggerIdParam'
+    get:
+      tags:
+      - triggers
+      operationId: getAgentTrigger
+      summary: One of the agent's triggers
+      responses:
+        '200':
+          description: Trigger
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Trigger'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    patch:
+      tags:
+      - triggers
+      operationId: updateAgentTrigger
+      summary: Change, pause or resume a trigger (owners and admins, in a browser session)
+      description: >-
+        Fields left out are unchanged. `threadId` "" sends each fire to a new thread; `callbackUrl` "" removes the
+        callback (one added now gets a secret, in this answer only); a `filter` with an empty `path` removes the
+        filter; a negative `dailyBudgetUsd` removes the budget. Resuming starts a schedule from now and forgets the
+        failures in a row.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerUpdate'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerSaved'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '422':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+    delete:
+      tags:
+      - triggers
+      operationId: deleteAgentTrigger
+      summary: Remove a trigger (owners and admins, in a browser session); its address stops working, its runs stay
+      responses:
+        '200':
+          $ref: '#/components/responses/OkReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/triggers/{triggerId}/secret:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/TriggerIdParam'
+    post:
+      tags:
+      - triggers
+      operationId: rotateAgentTriggerSecret
+      summary: Replace a trigger's webhook or callback secret (owners and admins); the old one stops working at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerSecretRotate'
+      responses:
+        '200':
+          description: The new secret, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerSaved'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/triggers/{triggerId}/fire:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - $ref: '#/components/parameters/TriggerIdParam'
+    post:
+      tags:
+      - triggers
+      operationId: fireAgentTrigger
+      summary: Run now (owners and admins, in a browser session)
+      description: >-
+        Fires the trigger at once, even while it is paused or backing off (a webhook's template gets no payload). The
+        agent's pause, runs at once and budgets hold: the run may be skipped. Audited as trigger.fire.
+      responses:
+        '202':
+          description: The run
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerRun'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/trigger-settings:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    get:
+      tags:
+      - triggers
+      operationId: getAgentTriggerSettings
+      summary: The agent's limits for its triggered runs, with the platform's ceilings
+      responses:
+        '200':
+          description: Limits
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerSettings'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+    put:
+      tags:
+      - triggers
+      operationId: setAgentTriggerSettings
+      summary: Set the agent's limits for its triggered runs, or pause all its triggers (owners and admins, in a browser session)
+      description: A field left out (or null) is the platform's default. Values must be within the ceilings.
+      parameters:
+      - $ref: '#/components/parameters/IfMatchHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerSettingsUpdate'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerSettings'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '403':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '409':
+          $ref: '#/components/responses/ErrorReply'
+        '412':
+          $ref: '#/components/responses/ErrorReply'
+        '428':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/runs:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    get:
+      tags:
+      - triggers
+      operationId: listAgentRuns
+      summary: The agent's triggered runs, newest first (everyone who may use the agent, platform staff)
+      parameters:
+      - name: triggerId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/RunStatusParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/RunPageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/agents/{agentId}/runs/{runId}:
+    parameters:
+    - $ref: '#/components/parameters/AgentIdParam'
+    - name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - triggers
+      operationId: getAgentRun
+      summary: One of the agent's triggered runs
+      responses:
+        '200':
+          description: Run
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TriggerRun'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/teams/{team}/runs:
+    parameters:
+    - $ref: '#/components/parameters/TeamParam'
+    get:
+      tags:
+      - triggers
+      operationId: listTeamRuns
+      summary: The triggered runs of the team's agents the caller may use, newest first (platform staff - every agent's)
+      parameters:
+      - $ref: '#/components/parameters/RunStatusParam'
+      - $ref: '#/components/parameters/LimitParam'
+      - $ref: '#/components/parameters/CursorParam'
+      responses:
+        '200':
+          $ref: '#/components/responses/RunPageReply'
+        '400':
+          $ref: '#/components/responses/ErrorReply'
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+  /v1/hooks/{hookId}:
+    parameters:
+    - name: hookId
+      in: path
+      required: true
+      description: The webhook's address (h_ and 128 random bits)
+      schema:
+        type: string
+    post:
+      tags:
+      - triggers
+      operationId: deliverWebhook
+      summary: Deliver to a webhook trigger (no session or key - the signature is the credential)
+      description: >-
+        Sign the raw body - `X-PDP-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>." + body)>`. A missing,
+        malformed or wrong signature, or one more than 5 minutes from the platform's clock, is 401 invalid_signature.
+        The body (at most 256 KiB, JSON or text) fills the trigger's template; a JSON body that doesn't meet the
+        trigger's filter is answered `matched: false` and starts nothing. A replay of a delivery is answered with the
+        first delivery's run (`replayed: true`). Each address takes at most 120 verified deliveries a minute, and at most
+        240 requests a minute from one client address, verified or not (429).
+      parameters:
+      - name: X-PDP-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 1024
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '202':
+          description: Accepted (a run, maybe skipped by a limit, or nothing when the filter didn't match)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WebhookAccepted'
+              example:
+                data:
+                  matched: true
+                  replayed: false
+                  runId: 5b0e7c1e-3f4a-4c55-9a8e-0b6f3c2d1e0f
+                  status: pending
+        '401':
+          $ref: '#/components/responses/ErrorReply'
+        '404':
+          $ref: '#/components/responses/ErrorReply'
+        '413':
+          $ref: '#/components/responses/ErrorReply'
+        '429':
+          $ref: '#/components/responses/ErrorReply'
 components:
   headers:
     ETag:
@@ -4554,6 +5239,19 @@ components:
         type: string
         enum: ['true']
   parameters:
+    TriggerIdParam:
+      name: triggerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunStatusParam:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/TriggerRunStatus'
     McpServerIdParam:
       name: serverId
       in: path
@@ -4589,6 +5287,13 @@ components:
       schema:
         type: string
         format: uuid
+    ApprovalIdParam:
+      name: approvalId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^ap_[A-Za-z0-9_-]{1,64}$'
     ThreadIdParam:
       name: threadId
       in: path
@@ -4599,6 +5304,14 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9_-]{1,64}$'
+    DocumentKindParam:
+      name: kind
+      in: path
+      required: true
+      description: An exposed document's kind (as the agent's author defined it, e.g. acme.board)
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
     AuditActionParam:
       name: action
       in: query
@@ -4732,6 +5445,22 @@ components:
         type: string
         format: uuid
   responses:
+    RunPageReply:
+      description: Runs, newest first, and nextCursor when more follow
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+            - data
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TriggerRun'
+              nextCursor:
+                type: string
+                description: Pass it back as cursor for the next page
     AuditPageReply:
       description: A page of audit entries, newest first
       content:
@@ -4772,6 +5501,381 @@ components:
               data:
                 $ref: '#/components/schemas/Ok'
   schemas:
+    TriggerKind:
+      type: string
+      enum: [schedule, webhook]
+    TriggerFilter:
+      type: object
+      required: [path, equals]
+      description: >-
+        A webhook's condition - the payload's field at `path` (names or array indexes joined by dots, at most 10) equals
+        `equals` (a string field as is, other values by their JSON text such as 42, true or null)
+      properties:
+        path:
+          type: string
+          maxLength: 200
+        equals:
+          type: string
+          maxLength: 1000
+    TriggerSchedule:
+      type: object
+      required: [cron, timezone, missedPolicy]
+      properties:
+        cron:
+          type: string
+          description: Five fields (minute hour day month weekday) or @hourly, @daily, @weekly, @monthly, @yearly
+        timezone:
+          type: string
+          description: IANA time zone
+        missedPolicy:
+          type: string
+          enum: [skip, run_once]
+          description: A fire missed while the platform wasn't running - skip it, or run once for the latest one
+        nextFireAt:
+          type: string
+          format: date-time
+          nullable: true
+    Trigger:
+      type: object
+      required: [id, agentId, kind, name, source, once, originThreadId, paused, threadId, messageTemplate, consecutiveFailures, createdAt, updatedAt, revision]
+      properties:
+        id:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/TriggerKind'
+        name:
+          type: string
+        source:
+          type: string
+          enum: [person, agent]
+          description: >-
+            Who made it - a person, or the agent itself (its schedule tool, when its template version lets it). An
+            agent-made trigger can be paused, resumed, run now or deleted; nothing else about it changes.
+        once:
+          type: boolean
+          description: A one-time reminder (agent-made), removed when it fires
+        originThreadId:
+          type: string
+          nullable: true
+          description: The thread the agent made it in (agent-made triggers)
+        paused:
+          type: boolean
+        pausedReason:
+          type: string
+          nullable: true
+          enum: [user, failures]
+          description: Paused by a person, or by the platform after failed runs in a row
+        threadId:
+          type: string
+          nullable: true
+          description: The thread every fire sends to (null - a new thread at every fire)
+        messageTemplate:
+          type: string
+          nullable: true
+          description: >-
+            The message, with placeholders {{payload}}, {{payload.<path>}} (webhooks), {{trigger.name}},
+            {{trigger.kind}}, {{fire.id}} and {{fire.time}}. Null when withheld (messageHidden): an agent-made
+            trigger's message is conversation-derived text, so platform staff never see it, and people who may
+            use the agent see it only when they may read the thread it was made in.
+        messageHidden:
+          type: boolean
+          description: The message is withheld from the caller (messageTemplate is null)
+        schedule:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/TriggerSchedule'
+        webhookUrl:
+          type: string
+          nullable: true
+          description: Where a webhook's sender POSTs (webhooks)
+        webhookSecretPrefix:
+          type: string
+          nullable: true
+          description: The webhook secret's first characters, to tell it apart
+        filter:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/TriggerFilter'
+        callbackUrl:
+          type: string
+          nullable: true
+        callbackSecretPrefix:
+          type: string
+          nullable: true
+        dailyBudgetUsd:
+          type: number
+          format: double
+          nullable: true
+          description: The most this trigger's runs may cost per UTC day
+        consecutiveFailures:
+          type: integer
+          format: int32
+        backoffUntil:
+          type: string
+          format: date-time
+          nullable: true
+        lastFiredAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdBy:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          $ref: '#/components/schemas/Revision'
+    TriggerCreate:
+      type: object
+      required: [kind, name, messageTemplate]
+      properties:
+        kind:
+          $ref: '#/components/schemas/TriggerKind'
+        name:
+          type: string
+          maxLength: 100
+        paused:
+          type: boolean
+        threadId:
+          type: string
+          maxLength: 64
+          description: A thread for every fire (shared, or not used yet); omitted or "" - a new thread at every fire
+        messageTemplate:
+          type: string
+          maxLength: 8000
+        cron:
+          type: string
+          maxLength: 200
+          description: Schedules (required)
+        timezone:
+          type: string
+          maxLength: 64
+          description: Schedules (default UTC)
+        missedPolicy:
+          type: string
+          enum: [skip, run_once]
+          description: Schedules (default skip)
+        filter:
+          $ref: '#/components/schemas/TriggerFilter'
+        callbackUrl:
+          type: string
+          maxLength: 2000
+          description: An https URL called, signed, when each run ends
+        dailyBudgetUsd:
+          type: number
+          format: double
+    TriggerUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        paused:
+          type: boolean
+        threadId:
+          type: string
+          maxLength: 64
+        messageTemplate:
+          type: string
+          maxLength: 8000
+        cron:
+          type: string
+          maxLength: 200
+        timezone:
+          type: string
+          maxLength: 64
+        missedPolicy:
+          type: string
+          enum: [skip, run_once]
+        filter:
+          $ref: '#/components/schemas/TriggerFilter'
+        callbackUrl:
+          type: string
+          maxLength: 2000
+        dailyBudgetUsd:
+          type: number
+          format: double
+    TriggerSaved:
+      type: object
+      required: [trigger]
+      properties:
+        trigger:
+          $ref: '#/components/schemas/Trigger'
+        webhookSecret:
+          type: string
+          description: The webhook secret (pdpwh_…), when this request made one - shown once
+        callbackSecret:
+          type: string
+          description: The callback secret (pdpcb_…), when this request made one - shown once
+    TriggerSecretRotate:
+      type: object
+      required: [which]
+      properties:
+        which:
+          type: string
+          enum: [webhook, callback]
+    TriggerSettings:
+      type: object
+      required: [paused, effectiveConcurrentRuns, effectiveRunSeconds, ceilingConcurrentRuns, ceilingRunSeconds, revision]
+      properties:
+        paused:
+          type: boolean
+          description: Every trigger of the agent is paused
+        maxConcurrentRuns:
+          type: integer
+          format: int32
+          nullable: true
+          description: Runs at once (pending and running); null - the default, 1
+        maxRunSeconds:
+          type: integer
+          format: int32
+          nullable: true
+          description: Null - the platform's ceiling
+        dailyBudgetUsd:
+          type: number
+          format: double
+          nullable: true
+          description: The most the agent's triggered runs may cost per UTC day
+        effectiveConcurrentRuns:
+          type: integer
+          format: int32
+        effectiveRunSeconds:
+          type: integer
+          format: int32
+        ceilingConcurrentRuns:
+          type: integer
+          format: int32
+        ceilingRunSeconds:
+          type: integer
+          format: int32
+        revision:
+          $ref: '#/components/schemas/Revision'
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    TriggerSettingsUpdate:
+      type: object
+      required: [paused]
+      properties:
+        paused:
+          type: boolean
+        maxConcurrentRuns:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 1
+        maxRunSeconds:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 60
+        dailyBudgetUsd:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+    TriggerRunStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, stopped, skipped]
+    TriggerRun:
+      type: object
+      required: [id, agentId, triggerId, triggerName, triggerKind, firedBy, fireId, threadId, status, reason, createdAt, costUsd, requests]
+      properties:
+        id:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+        teamId:
+          type: string
+          format: uuid
+        triggerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null once the trigger was deleted (its name stays)
+        triggerName:
+          type: string
+        triggerKind:
+          $ref: '#/components/schemas/TriggerKind'
+        firedBy:
+          type: string
+          enum: [schedule, webhook, manual]
+        fireId:
+          type: string
+          description: The fire's ID, also the message's pi-durable requestId
+        threadId:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TriggerRunStatus'
+        reason:
+          type: string
+          nullable: true
+          description: >-
+            Why it was skipped (trigger_paused, agent_paused, team_archived, concurrency, budget, backoff, missed,
+            agent_daily_runs),
+            stopped (max_run_time, budget) or failed (reply_error, delivery_failed, agent_moved, agent_disabled,
+            thread_private, …)
+        scheduledFor:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        costUsd:
+          type: number
+          format: double
+          description: The agent's model usage while the run was in progress, at current prices (an upper bound when it did other work meanwhile)
+        requests:
+          type: integer
+          format: int64
+        callbackStatus:
+          type: string
+          nullable: true
+          enum: [pending, delivered, failed]
+        link:
+          type: string
+          nullable: true
+          description: The console's path of the run's thread
+    WebhookAccepted:
+      type: object
+      required: [matched, replayed]
+      properties:
+        matched:
+          type: boolean
+          description: False - the filter didn't match; nothing started
+        replayed:
+          type: boolean
+          description: True - a replay of an earlier delivery, answered with its run
+        runId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TriggerRunStatus'
+        reason:
+          type: string
+          nullable: true
     PersonalWorkspaceSettings:
       type: object
       required: [enabled, maxAgents, maxRunning, revision, updatedAt]
@@ -4898,7 +6002,7 @@ components:
           nullable: true
     McpServer:
       type: object
-      required: [id, name, slug, description, url, accessMode, enabled, visibility, personal, hasHeaders, tools, revision, createdAt, updatedAt]
+      required: [id, name, slug, description, url, accessMode, enabled, visibility, personal, hasHeaders, tools, sendIdentity, identityAudience, identityEmail, revision, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -4935,6 +6039,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/McpTool'
+        sendIdentity:
+          type: boolean
+          description: >-
+            In proxy mode, every request the platform forwards carries a signed identity token (MCP-Gateway-Identity:
+            the agent, its team, the thread's visibility and, when the platform's records say so, the person the call
+            is for). Direct mode never does. See docs/mcp-identity.md
+        identityAudience:
+          type: string
+          nullable: true
+          x-omitempty: false
+          description: The identity token's audience (aud); null when it is the server's URL
+        identityEmail:
+          type: boolean
+          description: The identity token includes the person's email
         toolsRefreshedAt:
           type: string
           format: date-time
@@ -4996,6 +6114,16 @@ components:
             type: string
         enabled:
           type: boolean
+        sendIdentity:
+          type: boolean
+          description: Send the signed identity token in proxy mode (default on). See docs/mcp-identity.md
+        identityAudience:
+          type: string
+          maxLength: 2048
+          description: The identity token's audience; empty for the server's URL (the default)
+        identityEmail:
+          type: boolean
+          description: Include the person's email in the identity token (default off)
     McpServerUpdate:
       type: object
       properties:
@@ -5029,6 +6157,16 @@ components:
             type: string
         enabled:
           type: boolean
+        sendIdentity:
+          type: boolean
+          description: Send the signed identity token in proxy mode (default on). See docs/mcp-identity.md
+        identityAudience:
+          type: string
+          maxLength: 2048
+          description: The identity token's audience; empty for the server's URL (the default)
+        identityEmail:
+          type: boolean
+          description: Include the person's email in the identity token (default off)
     McpAttach:
       type: object
       required: [serverId]
@@ -5624,6 +6762,21 @@ components:
         clientMcp:
           type: boolean
           description: Let apps give its agents MCP servers for a thread
+        approvals:
+          allOf:
+          - $ref: '#/components/schemas/ToolApprovalPolicyInput'
+          description: Tools that ask a person first (version 1; default none)
+        agentSchedules:
+          type: boolean
+          description: Let its agents set their own reminders and recurring work (the schedule tool)
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AgentKind'
+          description: Which of the runtime's compositions its agents run (version 1; default assistant)
+        kindSettings:
+          allOf:
+          - $ref: '#/components/schemas/AgentKindSettings'
+          description: The kind's settings (version 1; omitted fields take the kind's defaults)
     AgentTemplateUpdate:
       type: object
       properties:
@@ -5666,6 +6819,15 @@ components:
             $ref: '#/components/schemas/McpAttached'
         clientMcp:
           type: boolean
+        approvals:
+          $ref: '#/components/schemas/ToolApprovalPolicy'
+        agentSchedules:
+          type: boolean
+          description: Its agents may set their own schedules (the runtime's schedule tool)
+        kind:
+          $ref: '#/components/schemas/AgentKind'
+        kindSettings:
+          $ref: '#/components/schemas/AgentKindSettings'
         createdAt:
           type: string
           format: date-time
@@ -5691,6 +6853,25 @@ components:
         clientMcp:
           type: boolean
           description: Let apps give its agents MCP servers for a thread (omitted keeps the current version's)
+        approvals:
+          allOf:
+          - $ref: '#/components/schemas/ToolApprovalPolicyInput'
+          description: Tools that ask a person first (omitted keeps the current version's, and so does a field omitted inside)
+        agentSchedules:
+          type: boolean
+          description: >-
+            Let its agents set their own reminders and recurring work (the schedule tool; omitted keeps the current
+            version's)
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AgentKind'
+          description: Which of the runtime's compositions its agents run (omitted keeps the current version's)
+        kindSettings:
+          allOf:
+          - $ref: '#/components/schemas/AgentKindSettings'
+          description: >-
+            The kind's settings, as a whole (omitted keeps the current version's when the kind stays the same, and
+            takes the new kind's defaults when it changes; omitted fields inside take the kind's defaults)
     AgentTemplateReview:
       type: object
       required: [decision]
@@ -5749,11 +6930,31 @@ components:
         running:
           type: boolean
           description: Whether its runtime is up now (it hibernates when idle and wakes on the next request)
+        awake:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/AgentAwake'
+          description: >-
+            Why it isn't hibernating, from its runtime's own report: only on GET /v1/agents/{agentId}, while it runs and
+            its runtime answers (absent otherwise, and in lists)
         model:
           nullable: true
           allOf:
           - $ref: '#/components/schemas/AgentModel'
           description: The model it runs on (absent - the platform's default model)
+        storageVersion:
+          type: string
+          nullable: true
+          description: >-
+            The newest pi-durable version that has written the agent's storage, as its runtimes reported it (absent:
+            none recorded yet). The platform refuses to start the agent on a runtime with an older one.
+        runtimeRefused:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/AgentRuntimeRefusal'
+          description: >-
+            The platform refused to start the agent on its runtime, which is older than the one that last wrote its
+            data (absent: no refusal since the last start). Requests that wake it answer 409 runtime_too_old.
         lastUsedAt:
           type: string
           format: date-time
@@ -5767,6 +6968,53 @@ components:
         updatedAt:
           type: string
           format: date-time
+    AgentRuntimeRefusal:
+      type: object
+      required: [runtimeVersion, storageVersion, at, message]
+      description: Why the agent's runtime was refused (the upgrade check, docs/custom-agents.md)
+      properties:
+        runtimeVersion:
+          type: string
+          description: The refused runtime's pi-durable version (empty - it reported none)
+        storageVersion:
+          type: string
+          description: The pi-durable version that has written the agent's storage
+        at:
+          type: string
+          format: date-time
+          description: When the latest start was refused
+        message:
+          type: string
+    AgentAwake:
+      type: object
+      description: What keeps a running agent from hibernating (docs/hibernation.md)
+      required: [reasons, backgroundTasks, waitingForPerson, overCeiling]
+      properties:
+        reasons:
+          type: array
+          description: >-
+            reply - a thread is replying; stream - someone is watching a thread; background - background work (tasks,
+            background subagents) younger than the platform's ceiling; recent - it was used within the idle timeout.
+            Empty: it hibernates at the idle reaper's next pass.
+          items:
+            type: string
+            enum: [reply, stream, background, recent]
+        backgroundTasks:
+          type: integer
+          format: int32
+          description: Units of background work keeping it awake (at most 1000)
+        backgroundSince:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the oldest of them started
+        waitingForPerson:
+          type: integer
+          format: int32
+          description: Its tasks waiting for a person's answer (an approval, a question); they don't keep it awake
+        overCeiling:
+          type: boolean
+          description: Background work older than the platform's ceiling, which the reaper aborts at its next pass
     AgentCreate:
       type: object
       required: [name]
@@ -5898,6 +7146,10 @@ components:
           type: integer
           format: int64
           description: MCP servers apps set on its threads, removed by the move
+        triggers:
+          type: integer
+          format: int64
+          description: Its triggers (schedules and webhooks), deleted by the move
         mcpServersDropped:
           type: array
           description: Names of its template version's MCP servers that the target team may not use (they stop applying)
@@ -6147,14 +7399,213 @@ components:
           type: integer
           format: int64
           description: When its result arrived (Unix milliseconds; absent while it runs)
-    ChatAuthor:
+        approval:
+          $ref: '#/components/schemas/ChatApproval'
+    ChatApproval:
       type: object
-      required: [kind, id, name]
-      description: Who sent a user message, as the platform recorded it
+      required: [id, callId, tool, status, requestedAt]
+      description: >-
+        A request to approve a tool call, as the thread's view shows it: on the call (without arguments) and in the
+        view's pending list (with a redacted view of the arguments)
+      properties:
+        id:
+          type: string
+        callId:
+          type: string
+        tool:
+          type: string
+        status:
+          $ref: '#/components/schemas/ToolApprovalStatus'
+        requestedAt:
+          type: integer
+          format: int64
+        expiresAt:
+          type: integer
+          format: int64
+        summary:
+          type: string
+          description: Why approval is asked (from the agent's own hook)
+        requestedFor:
+          $ref: '#/components/schemas/ChatAuthor'
+        decidedAt:
+          type: integer
+          format: int64
+        decidedBy:
+          $ref: '#/components/schemas/ApprovalDecider'
+        reason:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: true
+    ApprovalDecider:
+      type: object
+      required: [kind, name]
       properties:
         kind:
           type: string
-          enum: [user, service_account]
+          enum: [user, service_account, system]
+        id:
+          type: string
+        name:
+          type: string
+    AgentKind:
+      type: string
+      enum: [assistant, triage, researcher]
+      description: >-
+        Which of the runtime's compositions a template version's agents run (docs/first-party-agents.md): assistant
+        (the default), triage, or researcher (the deep researcher)
+    AgentKindSettings:
+      type: object
+      additionalProperties: false
+      description: >-
+        A kind's settings (docs/first-party-agents.md). Each field belongs to one kind; a field of another kind is
+        refused (invalid_kind_settings). The assistant takes none. Versions return every field of their kind, with
+        its default.
+      properties:
+        listTools:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.*-]{1,200}$'
+          description: 'Triage: MCP tools that list new or open items (names, or patterns with *)'
+        readTools:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.*-]{1,200}$'
+          description: 'Triage: MCP tools that read one item'
+        writeTools:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.*-]{1,200}$'
+          description: 'Triage: MCP tools that write (comment, label, close)'
+        approveWrites:
+          type: boolean
+          description: 'Triage: every write tool asks a person first (default true; added to the version''s approvals)'
+        backgroundSubagents:
+          type: boolean
+          description: 'Researcher: long questions run in background subagents (default true; never in a triggered run)'
+        maxPlanSteps:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 20
+          description: 'Researcher: the most steps a plan may have (default 8)'
+    ToolApprovalStatus:
+      type: string
+      enum: [pending, approved, denied, timed_out, cancelled]
+    ToolApprovalPolicy:
+      type: object
+      required: [tools, role, timeoutSeconds]
+      description: Which tools of a template version ask a person before they run (docs/approvals.md)
+      properties:
+        tools:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            pattern: '^[A-Za-z0-9_.*-]{1,200}$'
+          description: Tool names, or patterns where * stands for any characters (mcp__github__*); [] for none
+        role:
+          type: string
+          enum: [admin, editor, member]
+          description: >-
+            The lowest team role that may decide calls in shared threads besides the person the run is for (admin:
+            owners and admins only, the default)
+        timeoutSeconds:
+          type: integer
+          format: int32
+          minimum: 60
+          maximum: 2592000
+          description: How long a request waits before it is denied (default 86400)
+    ToolApprovalPolicyInput:
+      type: object
+      properties:
+        tools:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        role:
+          type: string
+          enum: [admin, editor, member]
+        timeoutSeconds:
+          type: integer
+          format: int32
+    ToolApproval:
+      type: object
+      required: [id, agentId, agentName, threadId, tool, callId, arguments, status, requestedAt, expiresAt, canDecide]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+          format: uuid
+        agentName:
+          type: string
+        threadId:
+          type: string
+        threadTitle:
+          type: string
+          nullable: true
+        tool:
+          type: string
+        callId:
+          type: string
+        arguments:
+          type: object
+          additionalProperties: true
+          description: >-
+            A bounded, redacted view: values under keys that name a credential, and values that look like one, read
+            "[redacted, N characters]"; strings are cut at 2,000 characters, the whole at 16 KiB
+        summary:
+          type: string
+          description: Why approval is asked (from the agent's own hook)
+        requestedFor:
+          $ref: '#/components/schemas/ApprovalDecider'
+        status:
+          $ref: '#/components/schemas/ToolApprovalStatus'
+        requestedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        decidedBy:
+          $ref: '#/components/schemas/ApprovalDecider'
+        reason:
+          type: string
+          description: The decider's reason, given to the model on denial
+        canDecide:
+          type: boolean
+          description: The caller may decide it (it is pending and they are allowed)
+    ToolApprovalDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, deny]
+        reason:
+          type: string
+          maxLength: 1000
+          description: Given to the model on denial
+    ChatAuthor:
+      type: object
+      required: [kind, id, name]
+      description: Who sent a user message, as the platform recorded it (a trigger - an unattended run; id is the trigger's)
+      properties:
+        kind:
+          type: string
+          enum: [user, service_account, trigger]
         id:
           type: string
         name:
@@ -6217,6 +7668,13 @@ components:
           description: Tool name (tool results)
         isError:
           type: boolean
+        details:
+          description: >-
+            A tool result's details: structured data the tool returned for UIs (any JSON, at most 16 KiB; larger ones
+            are left out and detailsOmitted is true). Not shown to the model.
+        detailsOmitted:
+          type: boolean
+          description: The tool's details were larger than 16 KiB and left out
         author:
           $ref: '#/components/schemas/ChatAuthor'
         at:
@@ -6242,6 +7700,35 @@ components:
           type: string
         output:
           type: string
+        details:
+          description: What the running tool has published for UIs so far (JSON, at most 16 KiB)
+        detailsOmitted:
+          type: boolean
+          description: The details were larger than 16 KiB and left out
+    ChatDocumentRef:
+      type: object
+      required: [revision]
+      properties:
+        revision:
+          type: string
+          description: Changes when the document does (a hash of its content)
+    ThreadDocument:
+      type: object
+      required: [kind, version, revision, value]
+      description: An exposed document of a conversation
+      properties:
+        kind:
+          type: string
+        version:
+          type: integer
+          description: The version of the document's shape (its definition's; values are migrated to it when read)
+        revision:
+          type: string
+          description: As in the thread's view; changes when the document does
+        value:
+          type: object
+          additionalProperties: true
+          description: The document (JSON, at most the size its author exposes, 1 MiB at most)
     ChatView:
       type: object
       required: [busy, messages, tools]
@@ -6268,6 +7755,18 @@ components:
         earlierCursor:
           type: string
           description: Paged reads only; pass it as `before` for the earlier messages (absent when there are none)
+        documents:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ChatDocumentRef'
+          description: >-
+            The documents the agent exposes that the conversation has, by kind, with their revisions (absent when it
+            has none). Read one with getAgentThreadDocument.
+        approvals:
+          type: array
+          description: The thread's tool calls waiting for a person's approval (absent when there are none)
+          items:
+            $ref: '#/components/schemas/ChatApproval'
     ChatDeltaEvent:
       type: object
       required: [type, seq]
@@ -6278,7 +7777,7 @@ components:
         type:
           type: string
           enum: [snapshot, message.added, message.updated, partial.set, partial.appended, partial.cleared, tool.started,
-            tool.updated, tool.finished, tool.removed, tools.set, run]
+            tool.updated, tool.finished, tool.removed, tools.set, run, document.updated, approvals.set]
         seq:
           type: integer
           format: int64
@@ -6326,8 +7825,24 @@ components:
           type: integer
           format: int64
           description: How long the tool call had run when the event was sent
+        details:
+          description: tool.updated and tool.finished - the tool's new details (null - none)
+        detailsOmitted:
+          type: boolean
+          description: tool.updated and tool.finished - whether the details are now too large to send
         busy:
           type: boolean
+        kind:
+          type: string
+          description: document.updated - the document's kind
+        revision:
+          type: string
+          description: document.updated - its new revision
+        approvals:
+          type: array
+          description: 'approvals.set: the thread''s pending approvals now ([] none)'
+          items:
+            $ref: '#/components/schemas/ChatApproval'
     AuditActor:
       type: object
       description: Who made the change, resolved when the log is read
@@ -6342,9 +7857,14 @@ components:
           - service_account
           - oauth
           - system
+          - agent
         userId:
           type: string
           format: uuid
+        agentId:
+          type: string
+          format: uuid
+          description: The agent (agent actors, which change only their own schedules)
         displayName:
           type: string
         email:
@@ -6383,6 +7903,7 @@ components:
           - api_key
           - oauth
           - system
+          - agent
         actorUserId:
           type: string
           format: uuid

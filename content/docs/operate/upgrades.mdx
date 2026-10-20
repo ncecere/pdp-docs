@@ -56,7 +56,7 @@ v0.4.0 lets agents run on their own and adds settings. The [release notes](/docs
 - **Webhook addresses** (`/v1/hooks/…`) are served on the platform's public port: your ingress must route them like the rest of `/v1`.
 - **Agents upgrade as they wake.** Approvals, kinds, agent-made schedules, tool details, exposed documents and background-work reports need the v0.4 runtime. An agent that was running when you upgraded keeps its old runtime until it hibernates.
 - **The upgrade check.** From its first start on the v0.4 runtime, an agent is refused on an older runtime (`409 runtime_too_old`). Don't roll the runtime image back on its own. A wrong record is reset with `pi-durable-platform reset-storage-version --agent <id>`.
-- **Rolling back** to v0.3.0's images (both of them) works on the schema at migration 26: triggers don't fire, approvals and kinds are ignored, and MCP servers get no identity tokens until you upgrade again.
+- **Rolling back** to v0.3.0's images (both of them) works on the schema at migration 26: triggers don't fire, approvals and kinds are ignored (tools that should wait for approval then run without asking: pause those agents first), and MCP servers get no identity tokens until you upgrade again.
 
 ## Upgrading to v0.3
 

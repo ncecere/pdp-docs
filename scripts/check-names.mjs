@@ -15,6 +15,9 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+// "PDP" as a word of its own. Not inside a hyphenated name such as the X-PDP-Signature header, which is a wire name, not prose.
+const BARE_PDP = /(?<![\w-])PDP(?![\w-])/;
+
 const root = new URL('../out/', import.meta.url).pathname;
 if (!existsSync(root)) {
   console.error('out/ not found: run `npm run build` first.');
@@ -116,15 +119,15 @@ for (const file of files(root)) {
   }
 
   const title = decode(html.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
-  if (/\bPDP\b/.test(title)) problems.push(`${rel}: bare "PDP" in the page title "${title}"`);
+  if (BARE_PDP.test(title)) problems.push(`${rel}: bare "PDP" in the page title "${title}"`);
   for (const m of html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)) {
-    if (/\bPDP\b/.test(textOf(m[1]))) problems.push(`${rel}: bare "PDP" in a heading 1`);
+    if (BARE_PDP.test(textOf(m[1]))) problems.push(`${rel}: bare "PDP" in a heading 1`);
   }
 
   // The page's own content: the article (docs pages) or main (home, 404).
   const body = html.match(/<article\b[\s\S]*<\/article>/)?.[0] ?? html.match(/<main\b[\s\S]*<\/main>/)?.[0] ?? '';
   const content = textOf(body);
-  const firstShort = content.search(/\bPDP\b/);
+  const firstShort = content.search(BARE_PDP);
   const firstLong = content.indexOf('Pi Durable Platform');
   if (firstShort !== -1 && (firstLong === -1 || firstShort < firstLong)) {
     problems.push(`${rel}: "PDP" before "Pi Durable Platform" is written out ("…${content.slice(Math.max(0, firstShort - 40), firstShort + 20)}…")`);

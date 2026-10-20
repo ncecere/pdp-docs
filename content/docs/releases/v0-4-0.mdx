@@ -95,7 +95,7 @@ More detail is in [Upgrades and migrations](/docs/operate/upgrades#upgrading-to-
 
 ### Rolling back
 
-Roll back **both images together**. v0.3.0's images run on the schema at migration 26 and ignore the new tables and columns: triggers don't fire and webhook addresses answer `404`, template versions' approvals and kinds are ignored, and MCP servers get no identity tokens. Pending runs and approvals stay recorded for when you upgrade again.
+Roll back **both images together**. v0.3.0's images run on the schema at migration 26 and ignore the new tables and columns: triggers don't fire and webhook addresses answer `404`, template versions' approvals and kinds are ignored (**tools that should wait for a person's approval then run without asking, so pause those agents before you roll back**), and MCP servers get no identity tokens. Pending runs and approvals stay recorded for when you upgrade again.
 
 Don't roll back only the runtime image: v0.4's platform refuses to start an agent on a runtime that doesn't report its version once a v0.4 runtime has written the agent's data (`409 runtime_too_old`).
 
