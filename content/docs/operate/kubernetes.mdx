@@ -101,28 +101,28 @@ and list each address as a `/32`. The chart refuses to render without it, rather
 
 ## 3. Install
 
-Pin both images by digest, from the [release notes](/docs/releases/v0-2-0#images-and-chart). Without a digest the default tag is `v<appVersion>`, the release the chart belongs to. For v0.2.0:
+Pin both images by digest, from the [release notes](/docs/releases/v0-3-0#images-and-chart). Without a digest the default tag is `v<appVersion>`, the release the chart belongs to. For v0.3.0:
 
 ```sh
-helm install pi-durable-platform oci://ghcr.io/ncecere/charts/pi-durable-platform --version 0.2.0 \
+helm install pi-durable-platform oci://ghcr.io/ncecere/charts/pi-durable-platform --version 0.3.0 \
   -n pi-durable-platform -f values.yaml \
-  --set images.platform.digest=sha256:3f988afa89eadec2b4f38b132cc34016300e10d11e7c08c0258a6546b195222d \
-  --set images.runtime.digest=sha256:11a098887c13377c985dae169d7dbbaedc854717b1d277e3cdf5aec45602ce8e
+  --set images.platform.digest=sha256:01972d4f8cf6dfa2e79f2834f2643590d2aca43ba705a347aa0d39040d198a36 \
+  --set images.runtime.digest=sha256:c4e967f0ff40df422971303e72bddc3f2225876f55029716f4300ca3126da4a5
 ```
 
-The chart is published, and signed, to `oci://ghcr.io/ncecere/charts/pi-durable-platform` for each release tag; its version is the release's (v0.2.0 is chart 0.2.0). From a checkout of the repository you can install `deploy/helm/pi-durable-platform` instead: its images are the release named in its `Chart.yaml`.
+The chart is published, and signed, to `oci://ghcr.io/ncecere/charts/pi-durable-platform` for each release tag; its version is the release's (v0.3.0 is chart 0.3.0). From a checkout of the repository you can install `deploy/helm/pi-durable-platform` instead: its images are the release named in its `Chart.yaml`.
 
 ### Verify the chart
 
 Verify a published chart with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) v3.0 or newer (keyless, GitHub Actions OIDC), as you verify the images:
 
 ```sh
-cosign verify ghcr.io/ncecere/charts/pi-durable-platform:0.2.0 \
-  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/chart.yml@refs/tags/v0.2.0 \
+cosign verify ghcr.io/ncecere/charts/pi-durable-platform:0.3.0 \
+  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/chart.yml@refs/tags/v0.3.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-Chart 0.2.0 has the digest `sha256:328a90a22c2d2a82a1e74a7b9667f3fa4bfe5d8ddd8a950967f7596b1a106cb8`. The images are verified with the identity of the `image.yml` workflow, as the [release notes](/docs/releases/v0-2-0#verifying-the-images-and-the-chart) show.
+Chart 0.3.0 has the digest `sha256:7a0848ea1f57cbb41aa0d27d32f6725b6173af218487b947cdf2663965fc42c1`. The images are verified with the identity of the `image.yml` workflow, as the [release notes](/docs/releases/v0-3-0#verifying-the-images-and-the-chart) show.
 
 ## 4. Check it
 

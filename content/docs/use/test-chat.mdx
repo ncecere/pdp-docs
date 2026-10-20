@@ -1,6 +1,6 @@
 ---
 title: Testing an agent
-description: "The Test tab of an agent in Pi Durable Platform's console: chats and searching them, what each message shows, loading earlier messages, steering and stopping a reply, and what wakes the agent."
+description: "The Test tab of an agent in Pi Durable Platform's console: chats and searching them, what each message shows, loading earlier messages, follow-ups, steering and stopping a reply, and what wakes the agent."
 ---
 
 Each agent in Pi Durable Platform has a **Test** tab: a chat with the agent, sending messages the same way an app would. Open it from the team's **Agents** (or **All agents**), then the agent, then **Test**. Every member of the team can use it; service-managed agents have no Test tab because their conversations belong to an app's users.
@@ -32,9 +32,10 @@ A long conversation opens with its latest messages. **Load earlier messages**, a
 
 ## Steering or stopping a reply
 
-While the agent is replying, the message box says **Steer the reply in progress**, and the send button becomes a stop button.
+While the agent is replying, the message box says **Enter queues a follow-up; Steer joins the reply in progress**, and the send button becomes a stop button.
 
-- **Steer**: type a message and choose **Steer**. The agent reads it after its current round of tool calls, or with its answer, and carries on with it in mind. Use it to correct or narrow a reply without starting over. Your message appears in the conversation where the agent took it in: after the tool results of the reply it changed.
+- **Enter** sends your message as a **follow-up**: it waits behind the reply in progress, and the agent answers it next.
+- **Steer**: type a message and choose **Steer**. It joins the reply in progress. The agent reads it after its current round of tool calls, or with its answer, and carries on with it in mind. Use it to correct or narrow a reply without starting over. Your message appears in the conversation where the agent took it in: after the tool results of the reply it changed.
 - **Stop** ends the reply in progress; the conversation keeps what was written so far. A stopped reply isn't an error.
 
 ## When the agent is asleep or off

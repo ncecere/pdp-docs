@@ -65,7 +65,7 @@ If a platform admin turns off or unpublishes the model an agent runs on, its Ove
 
 ## Turn it off
 
-**Turn off agent** in **Settings** hibernates it and refuses new messages, from the console and from apps; its conversations are kept but can't be read until it's turned on again. Apps get an error on their next message.
+**Turn off agent** in **Settings** hibernates it and refuses new messages, from the console and from apps; its conversations are kept but can't be read until it's turned on again. Apps get an error on their next message. A request that was already under way when you turned it off doesn't start it again.
 
 ## Move it
 
@@ -83,9 +83,9 @@ An app with an editor [service account](/docs/teams/service-accounts) can create
 - The team's owners and admins see them in **Agents**, marked **Service-managed**, with their external key, status and last use, but never their conversations, and can delete them.
 - Editor service accounts can change and delete them.
 - They can't be moved to another team.
-
-An agent a person gets by key in their own personal workspace isn't service-managed: it's theirs like any other.
 - They don't count towards the team's limit of 50 agents.
+
+In a shared team, an agent with an external key is always service-managed: the database enforces it. An agent a person gets by key in their own personal workspace isn't service-managed: it's theirs like any other.
 
 ## Names and limits
 

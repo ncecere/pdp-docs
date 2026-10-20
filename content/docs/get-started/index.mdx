@@ -43,13 +43,13 @@ On Kubernetes each runtime is a pod, or a [Kubernetes Agent Sandbox](https://age
 
 ## What it is not, yet
 
-PDP v0.2.0 is pre-1.0 software. It brought deployment manifests, several replicas, metrics and tracing, and key rotation. Some things are planned and not built:
+PDP v0.3.0 is pre-1.0 software. It brought paging and search, incremental event streams, steering, safe agent creation, moving agents between teams, and OAuth Connect for apps with many people. Some things are planned and not built:
 
 - Teams can't upload their own agent code. Agents come from templates: instructions, a model and MCP servers. Uploads need stronger runtime isolation first.
 - There are no files or images. Messages are text.
 - Personal workspaces record a monthly budget but don't enforce it.
 - An agent that hibernates can't wake itself for scheduled work.
 
-See the known limitations in [Release notes v0.2.0](/docs/releases/v0-2-0#known-limitations) (and those of [v0.1.0](/docs/releases/v0-1-0#known-limitations) that remain), and the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) for the order in which they're planned.
+See the known limitations in [Release notes v0.3.0](/docs/releases/v0-3-0#known-limitations) (and those of [v0.2.0](/docs/releases/v0-2-0#known-limitations) and [v0.1.0](/docs/releases/v0-1-0#known-limitations) that remain), and the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) for the order in which they're planned.
 
 Next: [Concepts](/docs/get-started/concepts).

@@ -5,7 +5,7 @@ description: "How Pi Durable Platform's database migrations work, upgrading the 
 
 ## Migrations
 
-The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0, v0.1.1 and v0.1.2 have 16 (v0.1.1 and v0.1.2 added none). v0.2.0 adds migration 17.
+The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0, v0.1.1 and v0.1.2 have 16 (v0.1.1 and v0.1.2 added none). v0.2.0 adds migration 17, and v0.3.0 adds 18 to 20.
 
 Apply them either way:
 
@@ -46,6 +46,16 @@ Run `doctor`, then deploy and test an agent.
 </Step>
 </Steps>
 
+## Upgrading to v0.3
+
+v0.3.0 adds features for apps and changes no settings. The [release notes](/docs/releases/v0-3-0#upgrading-from-v020) have the steps in order.
+
+- **Migrations 18 to 20.** 18 adds agents' `service_managed` flag, idempotency keys and agent moves. 19 adds OAuth scopes, app secrets, per-app subjects and usage attributed to apps. 20 makes the database enforce that an agent with an external key in a shared team is service-managed. Existing keyed agents (all made by service accounts in shared teams) are marked service-managed, so nothing changes for them.
+- **A rolling upgrade is safe** with several replicas. A v0.2 replica that creates a keyed agent after the migrations still gets a service-managed one: the database sets it.
+- **Agents upgrade as they wake.** Conversation paging, delta streams and steering need the v0.3 runtime. An agent that was running when you upgraded keeps its old runtime until it hibernates, and until then ignores `limit` and `before`, `format=delta` and `whenBusy`. Thread list paging and search work at once.
+- **MCP tool lists** stored before v0.3.0 are read again once, in the background, at start. A server that can't be reached keeps its list until the next start.
+- **Rolling back** to v0.2.0's images works on the schema at migration 20. A person's keyed agents in their personal workspace then become service-managed for them: they keep them but can't read them until you upgrade again.
+
 ## Upgrading to v0.2
 
 v0.2.0 changes a few things you should know before you upgrade from v0.1.x. The [release notes](/docs/releases/v0-2-0#upgrading-from-v012) have the steps in order.
@@ -77,8 +87,10 @@ Open event streams end when a platform pod stops; clients reconnect to the new o
 
 Migrations don't go backwards. To return to an older version after a migration ran, restore the databases from the backup you took before the upgrade.
 
+From v0.3.0 to v0.2.0, the old images run on the schema at migration 20. They ignore the new columns and tables, and treat every keyed agent as service-managed. See [Rolling back](/docs/releases/v0-3-0#rolling-back) in the v0.3.0 release notes.
+
 From v0.2.0 to v0.1.2, the old images also run on the new schema, which stays at migration 17, with two effects. v0.1.2 ignores group denials, so people who lost access get their API keys back until you upgrade again. And a request that sets MCP servers on a thread with no record fails. See [Rolling back](/docs/releases/v0-2-0#rolling-back) in the release notes.
 
 ## Pi's durable package
 
-The runtime pins Pi's durable package (1.3.0 in v0.2.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.
+The runtime pins Pi's durable package (1.3.0 in v0.2.0 and v0.3.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.

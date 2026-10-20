@@ -108,9 +108,11 @@ With `prompt=none` the platform never shows a page. If it can answer at once (th
 
 | `error` | Why | What to do |
 |---|---|---|
-| `login_required` | Not signed in to the platform, or signed in as someone other than `login_hint` | Send the person through without `prompt` |
-| `consent_required` | The person hasn't allowed your app for these scopes, and it isn't trusted | Send the person through without `prompt` |
+| `login_required` | Not signed in to the platform. Or, for an app the person connected before or a trusted app, signed in as someone other than `login_hint` | Send the person through without `prompt` |
+| `consent_required` | Your app isn't trusted, and the person never connected it or hasn't allowed it for these scopes | Send the person through without `prompt` |
 | `interaction_required` | Signed in, but the account can't use the platform now (suspended, or no longer in an allowed group) | Send the person through without `prompt`; they see why |
+
+For an app that isn't trusted and that the signed-in person never connected, the answer is always `consent_required`: the platform doesn't compare `login_hint`, so no app can find out which account a browser is signed in as.
 
 Use it to reconnect quietly when your app has lost its tokens, and fall back to the normal flow when it fails. It still needs a top-level navigation: never a hidden frame.
 
@@ -122,7 +124,7 @@ If your app knows who should connect, send their email address (or their identit
 
 - **Not signed in**: the platform passes the hint to the identity provider when it sends the person to sign in.
 - **Signed in as that person** (the email matches, ignoring case, or the subject does): nothing changes.
-- **Signed in as someone else**: the platform never connects that account, even for a trusted or remembered app. With `prompt=none` you get `login_required`. Without it, the consent page says whom your app expected and offers **Sign in as …** (it signs out and starts your request again, so the person signs in with the hint) or **Cancel** (`access_denied`). Allowing is refused (`409 account_mismatch`).
+- **Signed in as someone else**: the platform never connects that account, even for a trusted or remembered app. With `prompt=none` you get `login_required` if the person connected your app before or it's trusted, and `consent_required` otherwise. Without it, the consent page says whom your app expected and offers **Sign in as …** (it signs out and starts your request again, so the person signs in with the hint) or **Cancel** (`access_denied`). Allowing is refused (`409 account_mismatch`).
 
 Check the `subject` in the token response, or `GET /v1/me`, against the account you expected all the same.
 

@@ -16,7 +16,7 @@ Both name people by their **subject** for your app, never by email or platform u
 2. A platform admin puts it on the **trusted apps** list and issues it a secret in **Admin › Settings › App secrets** ([Settings](/docs/administer/settings#app-secrets)).
 3. The secret starts `pdpcs_` and is shown once. Keep it on your server, like a password.
 
-An app has at most two secrets, so it can rotate: the admin issues a new one, you move to it, the admin deletes the old one. A deleted secret stops working at once. So do all of an app's secrets when it is taken off the trusted list.
+An app has at most two secrets, so it can rotate: the admin issues a new one, you move to it, the admin deletes the old one. A deleted secret stops working at once. Taking an app off the trusted list deletes all its secrets: if it is trusted again, it needs new ones.
 
 Send the secret as `Authorization: Bearer pdpcs_…`. It works on these two endpoints only, and they take nothing else: not a session, not a person's token, not an API key. It isn't used, or accepted, at `/oauth/token`: connecting people stays the usual public flow with PKCE. Requests count against `REQUESTS_PER_MINUTE` per secret. A missing, wrong or deleted secret, or an app that isn't trusted, gets `401`.
 
@@ -39,10 +39,17 @@ curl -N https://agents.example.com/v1/app/events -H "Authorization: Bearer $PDP_
 
 ```text
 event: thread
-data: {"subjects":["3f6c1d2e-…"],"agentId":"…","threadId":"…","deleted":false,"thread":{"title":"Release questions","busy":true,…}}
+data: {"subjects":["3f6c1d2e-…"],"agentId":"…","threadId":"…","deleted":false,"thread":{"title":"Release questions","busy":true,"createdBy":{"kind":"user","subject":"3f6c1d2e-…"},"participants":[{"kind":"user","subject":"3f6c1d2e-…","lastSentAt":…},{"kind":"user","lastSentAt":…}],…}}
 ```
 
-`subjects` lists the people the change is for. `thread` is the thread now, as in the thread list; it is absent when `deleted` is true. `?once=true` sends `ready` and ends.
+`subjects` lists the people the change is for. `thread` is the thread now (an `AppThread`); it is absent when `deleted` is true. `?once=true` sends `ready` and ends.
+
+The thread names people only by your app's subjects too, never by platform user ID, email or name:
+
+- its creator (`createdBy`) and each participant who has an active connection to your app appear with their `subject`;
+- anyone else (a person who never connected your app or whose connection ended, and service accounts) appears with only their `kind` (`user` or `service_account`) and no identifier.
+
+So you see that someone else started or sent to a thread, and when, but not who.
 
 Each person sees what their own `GET /v1/agents/events` through your app would show:
 

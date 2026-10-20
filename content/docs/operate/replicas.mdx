@@ -77,7 +77,9 @@ Behind a connection pooler, the listening and lock connections must be **session
 
 ## Upgrading with several replicas
 
-A rolling upgrade has both versions running for a while. Migration 17 changes how a thread's MCP servers are stored, and requests that set MCP servers on a thread that has no record fail against the new schema until every replica runs the new version. See [Upgrading to v0.2](/docs/operate/upgrades#upgrading-to-v02).
+A rolling upgrade has both versions running for a while. From v0.2 to v0.3 that is safe: a v0.2 replica that creates an agent by key after migrations 18 to 20 still gets a service-managed one, because the database sets it. See [Upgrading to v0.3](/docs/operate/upgrades#upgrading-to-v03).
+
+From v0.1 to v0.2, migration 17 changes how a thread's MCP servers are stored, and requests that set MCP servers on a thread that has no record fail against the new schema until every replica runs the new version. See [Upgrading to v0.2](/docs/operate/upgrades#upgrading-to-v02).
 
 ## Check it
 

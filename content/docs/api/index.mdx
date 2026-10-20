@@ -21,7 +21,7 @@ The agent gateway (port 8099, `AGENTS_GATEWAY_ADDR`) is a separate listener for 
 - **Browser writes** need `X-CSRF-Token` (from `GET /v1/me`) and a same-origin `Origin`.
 - **Responses** are `{"data": …}`; errors are `{"error": {"code", "message"}}`. Every response carries `X-Request-ID`.
 - **Edits** use revisions: `ETag` on reads, `If-Match` on `PATCH` and settings `PUT`s (`428` if missing, `412` if stale).
-- **Lists** of users, teams, service accounts and audit entries page with `cursor` and `limit`, and search with `q`. An agent's threads do too, when you pass `limit` (without it, the whole list), and a conversation pages backwards with `limit` and `before`.
+- **Lists** of users, teams, service accounts and audit entries page with `cursor` and `limit`, and search with `q`. An agent's threads do too, when you pass `limit` (without it, the whole list), and a conversation pages backwards with `limit` and `before`. A `q` with a NUL character or invalid UTF-8 is `400 invalid_query`.
 - **Not allowed reads as not found** for agents, threads and teams the caller may not see.
 - **Rate limit**: `REQUESTS_PER_MINUTE` per person or service account, `429 rate_limited` with `Retry-After`.
 

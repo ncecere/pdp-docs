@@ -121,8 +121,8 @@ export default function HomePage() {
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
         Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, from{' '}
-        {productReleaseDate}: deployment manifests, several replicas, metrics and tracing, key rotation and a set
-        of safety fixes. What comes next is in the{' '}
+        {productReleaseDate}: paging and search, incremental event streams, steering, safe agent creation, moving
+        agents, OAuth Connect for apps with many people, and a set of safety fixes. What comes next is in the{' '}
         <a className="text-brand-link underline" href={productRoadmapUrl}>
           roadmap
         </a>{' '}

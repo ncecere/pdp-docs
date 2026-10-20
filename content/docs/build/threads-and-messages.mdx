@@ -67,7 +67,7 @@ curl "https://agents.example.com/v1/agents/$AGENT/threads?limit=50" -H "Authoriz
 
 - `limit` is 1 to 200. The reply is one page, newest activity first, with `nextCursor` beside `data` when more threads follow. The last page has no `nextCursor`.
 - Pass `nextCursor` back as `cursor`, with the same `q`. The cursor is opaque; a malformed one is `400 invalid_cursor`.
-- `q` keeps the threads whose title contains it, ignoring case (at most 200 characters). It works with or without `limit`.
+- `q` keeps the threads whose title contains it, ignoring case (at most 200 characters). It works with or without `limit`. A `q` with a NUL character or invalid UTF-8 is `400 invalid_query`.
 
 Every page follows the same visibility rules as the whole list: shared threads and the caller's own private ones.
 

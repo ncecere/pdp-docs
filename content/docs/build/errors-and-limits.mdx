@@ -19,7 +19,7 @@ The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_gr
 
 | Status | Codes | What to do |
 |---|---|---|
-| `400` | `invalid_text`, `invalid_thread_id`, `invalid_visibility`, `invalid_title`, `invalid_name`, `invalid_external_key`, `invalid_group_by`, `invalid_range`, `invalid_cursor`, `invalid_idempotency_key`, `invalid_format`, `unsupported_version`, … | Fix the request |
+| `400` | `invalid_text`, `invalid_thread_id`, `invalid_visibility`, `invalid_title`, `invalid_name`, `invalid_external_key`, `invalid_group_by`, `invalid_range`, `invalid_cursor`, `invalid_query`, `invalid_idempotency_key`, `invalid_format`, `unsupported_version`, … | Fix the request |
 | `401` | `unauthorized` | The key or token is invalid, expired or revoked. For an OAuth token, refresh once, then reconnect ([OAuth Connect](/docs/build/oauth-connect#7-handle-a-refused-token)). |
 | `403` | `forbidden`, `person_required` | The caller's role doesn't allow it, or a service account called a route about a person (or tried to move an agent) |
 | | `insufficient_scope` | An app's token with scope `agents:read` tried anything but a read. Ask the person to connect it with `agents` |

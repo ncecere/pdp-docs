@@ -63,7 +63,7 @@ Archived templates are fine: a move isn't a new deployment. Other refusals: `mov
 | MCP servers apps set on its threads | Deleted: apps set them again |
 | The old team's own MCP servers, and platform servers published to the old team only | Stop applying: the agent gets only servers its new team may use |
 
-The agent is hibernated by the move, and starts with its new team's models and servers on its next request.
+The agent is hibernated by the move, and starts with its new team's models and servers on its next request. Every start reads the agent's configuration as it is then, so a request already under way during the move can't start it again with the old team's model key or MCP servers. MCP servers an app sets on a thread during the move don't survive it either.
 
 The move is recorded as **Moved agent to another team** (`agent.move`) in both teams' audit logs, with the agent before and after, the thread counts, the dropped key and the number of thread MCP servers removed.
 

@@ -71,7 +71,8 @@ Protected resource metadata (RFC 9728). A refused app token's `WWW-Authenticate`
 | `login_hint` | Optional: the email address or identity provider subject of the person the app expects, at most 320 characters on one line |
 
 - Without a session, it sends the person to the platform's sign-in and back, passing `login_hint` to the identity provider. With `prompt=none`, it redirects back with `login_required` instead.
-- Signed in as someone `login_hint` doesn't name: with `prompt=none`, `login_required`; otherwise the consent page, which offers to sign in as the expected account or cancel, and refuses to allow.
+- With `prompt=none`, for an app that isn't trusted and that the signed-in person never connected: `consent_required`, without comparing `login_hint`.
+- Signed in as someone `login_hint` doesn't name: with `prompt=none` (for an app the person connected or a trusted one), `login_required`; otherwise the consent page, which offers to sign in as the expected account or cancel, and refuses to allow.
 - Signed in, with the app already allowed for the scopes or trusted, it redirects straight back with a code. Otherwise it shows the consent page (`/connect/consent` in the web app), or with `prompt=none` redirects back with `consent_required`. `prompt=consent` shows the consent page anyway.
 - A suspended person gets an error page (`access_denied`); with `prompt=none`, `interaction_required`.
 - Problems with the request before the client and redirect URI are known good (an unknown or expired client, an unregistered redirect URI, a repeated parameter, an overlong query) are shown as an HTML page, never redirected. Later problems redirect to the app with `error`.

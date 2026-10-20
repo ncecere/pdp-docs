@@ -7,12 +7,12 @@ Most installs should use the [Helm chart](/docs/operate/kubernetes) or the [Kust
 
 ## 1. The images
 
-Use a release's images, pinned by digest (the digests are in its [release notes](/docs/releases); for v0.2.0, see [Images and chart](/docs/releases/v0-2-0#images-and-chart)). Verify their signatures with cosign v3 or newer. For v0.2.0:
+Use a release's images, pinned by digest (the digests are in its [release notes](/docs/releases); for v0.3.0, see [Images and chart](/docs/releases/v0-3-0#images-and-chart)). Verify their signatures with cosign v3 or newer. For v0.3.0:
 
 ```sh
 for image in pi-durable-platform pi-durable-platform-runtime; do
-  cosign verify ghcr.io/ncecere/$image:v0.2.0 \
-    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.2.0 \
+  cosign verify ghcr.io/ncecere/$image:v0.3.0 \
+    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.3.0 \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 done
 ```

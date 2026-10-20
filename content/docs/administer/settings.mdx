@@ -60,10 +60,10 @@ An app secret lets a trusted app call the platform **as itself**: one event stre
 
 An app has at most two secrets, so it can rotate: issue a new one, have the app move to it, then delete the old one.
 
-A secret works only while its app is on the trusted list. Taking the app off the list stops its secrets at once; they show **Not trusted: doesn't work** until you delete them or trust the app again.
+A secret works only while its app is on the trusted list. Taking the app off the list **deletes its secrets**, in the same save: the confirmation says so, and each deletion is in the audit log. Trusting the app again doesn't bring them back: issue new ones. So taking an app off the list is also how you cut off a leaked secret for good.
 
 <Callout type="warn" title="A secret sees everyone who connected the app">
 With its secret, an app follows the threads of every person who connected it, and reads their usage. That is more than any one person's token allows. Issue secrets only to apps whose operators you'd trust with that.
 </Callout>
 
-Issuing and deleting a secret are recorded in the audit log (**Issued app secret**, **Deleted app secret**), with the app and the secret's first characters, never the secret. See [Apps with many people](/docs/build/apps-with-many-people) for what apps do with them.
+Issuing and deleting a secret are recorded in the audit log (**Issued app secret**, **Deleted app secret**), with the app and the secret's first characters, never the secret. A secret deleted because its app left the trusted list has the reason `untrusted`. See [Apps with many people](/docs/build/apps-with-many-people) for what apps do with them.
