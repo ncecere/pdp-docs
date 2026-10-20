@@ -94,6 +94,8 @@ Every name starts with `pdp_`. Histograms add `_bucket`, `_sum` and `_count`. Th
 | `oauth_token_errors_total` | `error` | Refused token requests, by OAuth error code |
 | `oauth_refresh_reuse_revocations_total` | none | Connections ended because a retired refresh token was used again |
 | `signins_total` | `method` (`oidc` or `dev`), `result`, `reason` | Sign-ins |
+| `group_recheck_total` | `result` (`allowed`, `denied`, `unknown`, `error`, `no_token`) | [Group re-check](/docs/operate/oidc#re-checking-groups) outcomes. `unknown`: the identity provider couldn't say, and access is kept for now. `error`: the stored token can't be opened, or the answer couldn't be recorded. `no_token` is not a check but a sign-in under `OIDC_ALLOWED_GROUPS` that brought no refresh token: that person is never re-checked |
+| `group_recheck_people` | `state` (`with_token`, `without_token`) | Recently active people the group re-check applies to, by whether a refresh token is kept for them. Every replica reports the same value: use `max` |
 | `rate_limit_rejections_total` | `limiter` | Requests refused with `429`, by limiter |
 | `thread_event_subscribers` | none | Open thread event streams on this replica |
 | `background_runs_total`, `background_run_duration_seconds`, `background_last_success_timestamp_seconds` | `loop`, `result` | The background loops: `reaper`, `cleanup`, `rate_cleanup`, `group_recheck`, `thread_events` (only listeners that failed) and `agent_count` |
@@ -157,7 +159,7 @@ Tracing is **off** unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set. It is the base U
 |---|---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | none: tracing is off | The collector's base URL, `http` or `https` |
 | `OTEL_SERVICE_NAME` | `pi-durable-platform` | The `service.name` of the spans |
-| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of new traces kept, from 0 to 1. A request that arrives with a sampling decision keeps it |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of traces kept, from 0 to 1. It decides for every request: a `traceparent` or sampled flag that a client sends doesn't force a trace |
 
 The exporter also honours the standard OpenTelemetry variables for its headers, timeout, compression and TLS certificates (`OTEL_EXPORTER_OTLP_HEADERS` and the others). Set those in the process environment, and take authentication headers from a Secret, not from a file.
 
@@ -185,7 +187,7 @@ networkPolicy:
 - `agent.wake` (the launcher, how it started, the result and the agent's ID) and `agent.runtime_request` (the relay to the agent's runtime) below the request that woke the agent. The request to the runtime, and the warm pool's activation call, carry a `traceparent` header.
 - `model.upstream` (the provider kind, the platform model's name, the status and the tokens) and `mcp.upstream` (the server, and the number and names of the tools called) below the gateway request. The trace context is sent on to the provider or the MCP server.
 
-A request that arrives with a `traceparent` header is continued. `baggage` is neither read nor sent.
+A caller doesn't decide what is traced. Every request to the API or the gateway starts a trace of its own, kept or not by `OTEL_TRACES_SAMPLER_ARG`, whatever `traceparent` it carries, so nobody can force traces to be recorded. An incoming `traceparent` is kept only as a link on the request's span. The spans below the request follow its decision and send their own `traceparent`. `baggage` is neither read nor sent.
 
 A span never holds message content, request or response bodies, headers, URLs, keys, tokens or a person's identity. Errors are reduced to a fixed reason. A test checks all the spans of a conversation for the secrets and prompts it used.
 

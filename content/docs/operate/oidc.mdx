@@ -62,14 +62,14 @@ With `OIDC_ALLOWED_GROUPS` set but no `offline_access`, the platform logs a warn
 
 ### How it works
 
-At sign-in the platform keeps the person's refresh token, sealed with `ENCRYPTION_KEY`. Every `OIDC_GROUP_RECHECK_INTERVAL` (15 minutes by default) it exchanges the token at your provider's token endpoint for fresh claims, takes the groups from them, and applies the same rule as at sign-in. If your provider rotates the refresh token, the new one replaces the kept one. It checks people who were recently active: a sign-in, a live session, or an API key or connected app used in the last 30 days. A removal takes effect within the interval plus up to a minute. Set `OIDC_GROUP_RECHECK_INTERVAL=0` to turn the re-check off (with the chart, `oidc.groupRecheckInterval: "0"`; `oidc.groupRecheckGrace` sets the grace period; both are strings).
+At sign-in the platform keeps the person's refresh token, sealed with `ENCRYPTION_KEY`. Every `OIDC_GROUP_RECHECK_INTERVAL` (15 minutes by default) it exchanges the token at your provider's token endpoint for fresh claims, takes the groups from them, and applies the same rule as at sign-in. Every group the provider lists is matched; only the first 200 are stored and shown. If your provider rotates the refresh token, the new one replaces the kept one, whatever else the answer says. A check that has begun is finished and recorded even while the platform shuts down, so a rotated token isn't lost. It checks people who were recently active: a sign-in, a live session, or an API key or connected app used in the last 30 days. A removal takes effect within the interval plus up to a minute. Set `OIDC_GROUP_RECHECK_INTERVAL=0` to turn the re-check off (with the chart, `oidc.groupRecheckInterval: "0"`; `oidc.groupRecheckGrace` sets the grace period; both are strings).
 
 | The provider's answer | What happens |
 |---|---|
 | Lists an allowed group | Access continues, and the person's stored groups are updated |
 | Lists none | Access ends: **no longer in a group allowed** |
 | Refuses the refresh token (the person was disabled, or the grant was revoked or expired) | Access ends: **the provider no longer vouches for them** |
-| Can't be asked: it is unreachable, answers with an error, or its answer has no groups claim | Nothing changes, and the platform logs a warning. When `OIDC_GROUP_RECHECK_GRACE` (24 hours by default) has passed since the provider last vouched for the person, access ends: **the provider could not confirm their groups** |
+| Can't be asked: it is unreachable, answers with an error, or its answer has no groups claim. The same applies when the stored token can't be opened, because `ENCRYPTION_KEY` changed without `ENCRYPTION_KEY_PREVIOUS` | Nothing changes, and the platform logs a warning. When `OIDC_GROUP_RECHECK_GRACE` (24 hours by default) has passed since the provider last vouched for the person, access ends: **the provider could not confirm their groups** |
 
 So a provider outage costs nobody access for a day, and a person the provider stops answering for loses it after one. The grace period is at least the interval.
 
@@ -82,7 +82,7 @@ For a person whose access ends, the platform:
 - forgets the stored refresh token;
 - makes their **personal API keys** stop working. They aren't revoked, and work again when access is restored.
 
-Their data, team memberships and agents stay. A conversation stream they already had open isn't closed, but every new request is refused with `403 group_denied`.
+Their data, team memberships and agents stay. Event streams they already had open end within 30 seconds, when the platform checks their access again, and every new request is refused with `403 group_denied`.
 
 This is separate from **Suspend…**: a suspension is an admin's decision, and only an admin changes it. Group access and suspension never overwrite each other, and a person is inactive while either applies. In **Admin › Users**, the person's **Status** shows a **Group access ended** badge, with the reason on hover, and their page says why. Their entry in the audit log reads **Ended access: no longer in an allowed group**, with the reason and how many connected apps were disconnected; see [People and teams](/docs/administer/people-and-teams#users).
 
@@ -93,7 +93,7 @@ Signing in applies the rule again. When it passes, the block is lifted (**Restor
 ### What isn't covered
 
 - The bootstrap admin and development personas are never re-checked.
-- People who signed in before the check existed, or when your provider issued no refresh token, have nothing to check with: their groups apply when they next sign in.
+- People who signed in before the check existed, or when your provider issued no refresh token, have nothing to check with: their groups apply when they next sign in. This fails open on purpose, so a provider that issues no refresh tokens can't lock everyone out. It is made visible instead: each such sign-in is logged, the metrics `pdp_group_recheck_total{result="no_token"}` and `pdp_group_recheck_people{state="without_token"}` count it, and `doctor` warns while recently active people have no token (see [The group re-check check](/docs/operate/doctor-and-health#the-group-re-check-check)).
 - A provider that lets refresh tokens expire for good (an absolute lifetime) ends access with the "no longer vouches" reason when that happens. The person signs in again.
 - The stored refresh tokens are sealed with `ENCRYPTION_KEY`. `rekey` and `doctor` cover them: after a [key rotation](/docs/operate/key-rotation#what-rekey-does-and-doesnt-do), run `rekey` before you drop the previous key, and group re-checks keep working.
 

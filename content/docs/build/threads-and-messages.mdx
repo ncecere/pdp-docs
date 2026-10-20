@@ -49,6 +49,8 @@ PATCH  /v1/agents/{agentId}/threads/{threadId}      # {"title": "…"}, 1 to 200
 DELETE /v1/agents/{agentId}/threads/{threadId}      # stop it and remove it from the list
 ```
 
+A reserved thread, one that has no message yet, can be deleted too.
+
 **Listing never wakes the agent**: the platform keeps a record of each thread. Each has `title` (by default the first line of its first message, up to 60 characters), `createdAt`, `updatedAt` (moves when a message is sent and when a reply ends), `busy`, `lastReplyAt`, `lastError` (why the last reply failed; absent when it succeeded), `visibility`, `createdBy` and `participants`. The list has every thread the caller may see, without paging. Reading a transcript, sending, stopping and deleting wake the agent.
 
 ## Send a message
@@ -101,6 +103,8 @@ curl -N https://agents.example.com/v1/agents/events -H "Authorization: Bearer $T
 One stream for every agent the caller may use: `event: ready` first, then `event: thread` with `{agentId, threadId, deleted, thread}` whenever a thread is created, renamed, starts or finishes a reply, or is deleted. `?agentId=` limits it to one agent. It **never wakes an agent**, so use it for inbox-style lists (unread, done) and keep that state in your app. It covers shared threads and the caller's own private ones.
 
 Both streams send a keep-alive comment every 15 seconds and end when the platform restarts (for example during a deploy). Reconnect with a little random delay. A slow reader may miss `thread` events: refresh a thread from `GET …/threads` if it looks stale.
+
+The platform checks the caller's access again every 30 seconds while a stream is open. A thread's stream ends when the caller is suspended, denied by the [group re-check](/docs/operate/oidc#re-checking-groups) or may no longer use the agent, or when the thread is someone else's private one. So does `GET /v1/agents/events?agentId=…`. Reconnecting is then refused like any other request. A stream of every agent stays open, but stops carrying the threads of an agent the caller can no longer use. A revoked API key, app grant or service account key doesn't end a stream that is already open.
 
 ## Stop, hibernate, turn off
 

@@ -25,6 +25,15 @@ CREATE DATABASE pdp OWNER pdp;
 
 The platform's migrations create everything inside it. See [Upgrades and migrations](/docs/operate/upgrades).
 
+Then close it to everyone else. PostgreSQL lets `PUBLIC`, so every role, connect to a database it creates, and agents' roles are roles of the same server:
+
+```sql
+REVOKE CONNECT ON DATABASE pdp FROM PUBLIC;
+GRANT CONNECT ON DATABASE pdp TO pdp;
+```
+
+Grant `CONNECT` to any other role that uses the database too. See [Where agent roles can connect](#where-agent-roles-can-connect).
+
 ## The agents database
 
 Create a second database owned by a **provisioning role** with `CREATEROLE`. It needn't be a superuser:
@@ -43,7 +52,9 @@ For each agent it then creates:
 - a **login role** `agent_<id>`, with a random password, `NOINHERIT NOCREATEDB NOCREATEROLE` and a connection limit of 2;
 - a **schema** of the same name, owned by that role.
 
-The agent's role owns only its schema and has no rights on any other, so one agent can't read another's conversations. The provisioning role is never given to agents. Deleting an agent drops its schema and role.
+The agent's role owns only its schema and has no rights on any other, so one agent can't read another's conversations. The provisioning role is never given to agents.
+
+Deleting an agent stops its role from signing in, ends its sessions, drops its schema and anything else the role created in the agents database (large objects or stray tables, for example), then drops the role. Each step can be repeated: if one fails, the agent stays, with an error, and deleting it again finishes.
 
 `AGENTS_CREATE_DATABASE=true` makes the platform create the agents database through `DATABASE_URL` at start-up. It's for development and refused on a reachable host.
 
@@ -62,6 +73,26 @@ Because the record is in the agent's own schema, only that agent's role can writ
 The runtime creates the table itself, with the agent's own role, the first time a runtime of this version starts the agent. There is nothing to migrate: agents move as they next wake.
 
 While runtimes of an older release may still run (an old pod during a rollout, or an agent woken with an old image), the new runtime also takes the older release's advisory lock on its connection, and refuses to start if a session of the agent's own role holds it. A holder running as any other role is ignored. The older lock stays until no older runtime is left.
+
+### Where agent roles can connect
+
+An agent's role is a login role of the PostgreSQL **server**, and the runtime that holds its password runs code the platform doesn't trust. Schema rights keep it inside its own schema of the agents database. But unless you revoke it, PostgreSQL lets every role connect to every database on the server, including the platform database. There, a role could take the platform's advisory locks (waking an agent, the idle reaper, migrations) and stop agents from waking or the platform from starting.
+
+So the database server is a trust boundary you configure:
+
+1. **Revoke `CONNECT` from `PUBLIC`** on the platform database, and grant it to the platform's role, as shown in [The platform database](#the-platform-database). Do the same for the other databases on that server that agents must not reach, including `postgres`.
+2. Or, in addition, **limit agent roles to the agents database in `pg_hba.conf`**. Agent roles are named `agent_` followed by the agent's ID without dashes, and PostgreSQL 16 or later reads a name that starts with `/` as a regular expression. Put these rules before any broader ones:
+
+   ```text
+   host pdp_agents /^agent_ all scram-sha-256
+   host all        /^agent_ all reject
+   ```
+
+The repository's CloudNativePG example (`deploy/examples/cloudnative-pg/`) does both. The platform doesn't revoke anything itself, because other roles may depend on connecting to those databases.
+
+`doctor` warns while `PUBLIC` may connect to the platform database, with the statements to run. When both databases are on the same server, it also lists the other databases there that `PUBLIC` may connect to. See [Doctor and health checks](/docs/operate/doctor-and-health#the-database-access-checks).
+
+The agents database itself can't be closed to agent roles. Nothing the platform needs there depends on a lock an agent could hold: an agent's role holding the lock that serialises replicas' start-up can't block it.
 
 ### Size
 
@@ -90,10 +121,10 @@ pi-durable-platform prune-roles             # drop them
 Run it while no agents are being created, with `--dry-run` first. The platform marks each role it creates with a comment naming its agents database. `prune-roles` drops a role only when it:
 
 - is named like an agent's (`agent_…`), belongs to no agent in the platform database, and has no schema in the agents database;
-- is a login role made the way the platform makes them: no privileged attributes and no memberships, managed by the provisioning role, and not marked for another agents database;
+- is a role made the way the platform makes them: no privileged attributes and no memberships, managed by the provisioning role, and not marked for another agents database (it may have lost its login, which a half-finished deletion leaves);
 - has no open sessions.
 
-It never forces anything: no `DROP OWNED` and no `CASCADE`. If PostgreSQL finds that the role still owns objects, or has privileges, in any database, the role is kept and listed with the reason. That protects a live agent of another installation on a shared server, which owns its schema in another database. Roles made before the comment existed carry no mark, and are still considered: only those that own nothing can go.
+It drops what the role still owns in the agents database, such as a large object or a table it created. It touches nothing in any other database: if PostgreSQL finds that the role still owns objects, or has privileges, in another database, the role is kept and listed with the reason. That protects a live agent of another installation on a shared server, which owns its schema in another database. Roles made before the comment existed carry no mark, and are still considered: only those that own nothing in other databases can go.
 
 ## Known limits
 

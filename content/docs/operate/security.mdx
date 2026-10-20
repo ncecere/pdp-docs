@@ -36,6 +36,7 @@ Sessions are cookies (`Secure` on https), lasting `SESSION_TTL`. Writes from the
 If `OIDC_ALLOWED_GROUPS` is set, the platform keeps asking the identity provider whether people are still in an allowed group, so removing someone from the group ends their access within a check interval instead of at some later sign-in. For a person it finds outside the group, or whom the provider no longer vouches for, the platform:
 
 - **ends their browser sessions** and **disconnects their connected apps**;
+- **ends their open event streams** within 30 seconds, as for a suspended person;
 - **stops their personal API keys from working**, without revoking them;
 - keeps their data, team memberships and agents.
 
@@ -43,7 +44,7 @@ This is separate from **Suspend…**, which only an admin does: neither undoes t
 
 ## Thread MCP servers have a known creator
 
-An app can give a thread its own MCP servers. They belong to a thread whose creator the platform knows. Setting servers on a thread ID that has no record **starts the thread**, the caller being its creator, as its first message would. A thread's servers are never kept without a thread. So nobody can leave servers on an ID for someone else's later private thread to inherit, which a client-chosen thread ID allowed before. Whoever uses an ID later gets the normal rules of the thread they find: a shared thread they may join, or a private thread that answers `404 thread_not_found`. See [Thread MCP servers](/docs/build/thread-mcp-servers).
+An app can give a thread its own MCP servers. They belong to a thread whose creator the platform knows. Setting servers on a thread ID that has no record **starts the thread**, the caller being its creator, as its first message would. A thread's servers are never kept without a thread. So nobody can leave servers on an ID for someone else's later private thread to inherit, which a client-chosen thread ID allowed before. Whoever uses an ID later gets the normal rules of the thread they find: a shared thread they may join, or a private thread that answers `404 thread_not_found`. While a thread has no message yet, only its creator may change its servers, and someone else's first message drops them. See [Thread MCP servers](/docs/build/thread-mcp-servers#whose-thread-it-is).
 
 Threads that the platform names itself, with an unguessable ID (`POST /v1/agents/{id}/threads`), can't be guessed or pre-empted at all. See [Threads, messages and events](/docs/build/threads-and-messages#start-a-thread).
 
@@ -76,5 +77,8 @@ Teams' own providers and MCP servers, apps' metadata documents and apps' MCP ser
 - **Client-chosen thread IDs can be guessed if the client picks guessable ones**: whoever uses an ID first starts that thread. A shared thread can then be joined by anyone who may use the agent, and a private one is `404` for everyone else. Use `POST /v1/agents/{id}/threads`, or random IDs.
 - **Group re-checks have gaps**: the bootstrap admin and development personas are never re-checked, and people whose provider issued no refresh token are checked only when they sign in. See [Re-checking groups](/docs/operate/oidc#what-isnt-covered).
 - **Database roles are server-wide**: agent roles outlive a dropped agents database. `doctor` lists them and `prune-roles` drops them.
+- **The database server is a trust boundary you configure**: unless you revoke it, an agent's role may connect to the platform database and other databases on its server. See [Where agent roles can connect](/docs/operate/databases#where-agent-roles-can-connect); `doctor` warns until it's closed.
+- **Open streams and keys**: an event stream closes within 30 seconds when a person loses access, but a revoked API key, app grant or service account key doesn't close a stream that is already open.
+- **A `404` reveals a private thread's ID**: on a client-chosen ID, `404 thread_not_found` tells the caller that the ID is someone's private thread. Platform-chosen IDs can't be probed this way.
 
 Stronger sandboxing, to run teams' own code, is planned on the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md).

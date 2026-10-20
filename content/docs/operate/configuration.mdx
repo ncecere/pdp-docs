@@ -116,7 +116,7 @@ The default model is for templates and agents that don't choose one from the mod
 | `METRICS_ADDR` | none: off | Where a listener that serves Prometheus metrics at `/metrics`, and nothing else, listens: `host:port` or `:port`, such as `:9090`. It has no authentication, so bind it privately and never route an Ingress to it. It can't be the same as `LISTEN_ADDR` or `AGENTS_GATEWAY_ADDR`. The Helm chart sets `:9090` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | none: tracing is off | The base URL of an OpenTelemetry collector that takes OTLP over HTTP (port 4318, not gRPC), such as `http://otel-collector:4318`. Must be an `http` or `https` URL |
 | `OTEL_SERVICE_NAME` | `pi-durable-platform` | The `service.name` of the spans |
-| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of new traces kept, from 0 to 1 |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of traces kept, from 0 to 1. A client's `traceparent` doesn't force a trace |
 
 The trace exporter also reads the standard OpenTelemetry variables for its headers, timeout, compression and TLS (`OTEL_EXPORTER_OTLP_HEADERS` and the others). Set those in the process environment, from a Secret. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
 

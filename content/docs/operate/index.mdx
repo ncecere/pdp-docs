@@ -9,14 +9,21 @@ Pi Durable Platform is one Go binary with the web app embedded, plus an agent ru
 
 | Part | What | Port |
 |---|---|---|
-| **The platform** (`ghcr.io/ncecere/pi-durable-platform:v0.1.2`) | Web app, API, OAuth endpoints, background loops (hibernation, clean-up, thread events) | `8098` (`LISTEN_ADDR`): put your HTTPS ingress in front |
+| **The platform** (`ghcr.io/ncecere/pi-durable-platform:v0.2.0`) | Web app, API, OAuth endpoints, background loops (hibernation, clean-up, thread events) | `8098` (`LISTEN_ADDR`): put your HTTPS ingress in front |
 | **The agent gateway** (the same process) | The model proxy, the MCP proxy, and usage and thread reports, for agents only | `8099` (`AGENTS_GATEWAY_ADDR`): never expose it outside the cluster |
 | **The metrics port** (the same process; optional) | `GET /metrics` for Prometheus, and nothing else, with no authentication | Off unless `METRICS_ADDR` is set; the chart sets `:9090`. Never expose it: see [Metrics and tracing](/docs/operate/metrics-and-tracing) |
-| **Agent runtimes** (`ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.2`) | One Node.js process with Pi's durable package per running agent; started by the platform | `4100`, reached by the platform only |
+| **Agent runtimes** (`ghcr.io/ncecere/pi-durable-platform-runtime:v0.2.0`) | One Node.js process with Pi's durable package per running agent; started by the platform | `4100`, reached by the platform only |
 | **PostgreSQL**, platform database (`DATABASE_URL`) | People, teams, templates, agents' records, keys, audit log, usage | |
 | **PostgreSQL**, agents database (`AGENTS_DATABASE_URL`) | One schema and role per agent: its conversations | |
 
-Both images are multi-arch (linux/amd64 and linux/arm64), run as non-root users with read-only root filesystems, and are signed with cosign keyless signing. Pin them by digest; the digests are on the [v0.1.2 release page](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.1.2).
+Both images are multi-arch (linux/amd64 and linux/arm64), run as non-root users with read-only root filesystems, and are signed with cosign keyless signing. Pin them by digest. For v0.2.0:
+
+```text
+ghcr.io/ncecere/pi-durable-platform@sha256:3f988afa89eadec2b4f38b132cc34016300e10d11e7c08c0258a6546b195222d
+ghcr.io/ncecere/pi-durable-platform-runtime@sha256:11a098887c13377c985dae169d7dbbaedc854717b1d277e3cdf5aec45602ce8e
+```
+
+The release's Helm chart is `oci://ghcr.io/ncecere/charts/pi-durable-platform`, version `0.2.0`. The [release notes](/docs/releases/v0-2-0#verifying-the-images-and-the-chart) show how to verify the images and the chart.
 
 ## Requirements
 

@@ -19,11 +19,11 @@ export const gitConfig = {
 /** The product's repository. */
 export const productRepo = 'https://github.com/ncecere/pi-durable-platform';
 
-/** The Pi Durable Platform release these docs describe: a fix release on top of v0.1.1. */
-export const productVersion = 'v0.1.2';
+/** The Pi Durable Platform release these docs describe: "Run it anywhere, safely". */
+export const productVersion = 'v0.2.0';
 
-/** The date that release was tagged (YYYY-MM-DD). */
-export const productReleaseDate = '2026-10-19';
+/** The date that release was published (YYYY-MM-DD, UTC). */
+export const productReleaseDate = '2026-10-20';
 
 /**
  * Links to files in the product's repository, pinned at the release's tag so
@@ -47,9 +47,13 @@ export const runtimeImage = `ghcr.io/ncecere/pi-durable-platform-runtime:${produ
 
 /** The release's signed multi-arch image digests: deploy by these. */
 export const productImageDigest =
-  'ghcr.io/ncecere/pi-durable-platform@sha256:c20916ab720cc5353e17d8ad5d7c12a50fd637b9cbedc1e453f1a99ca6db6deb';
+  'ghcr.io/ncecere/pi-durable-platform@sha256:3f988afa89eadec2b4f38b132cc34016300e10d11e7c08c0258a6546b195222d';
 export const runtimeImageDigest =
-  'ghcr.io/ncecere/pi-durable-platform-runtime@sha256:7b61a2af7b1c4aafec78ec0c5af4e9ae8e6978c1bfd375d9fea9f0b52e32c983';
+  'ghcr.io/ncecere/pi-durable-platform-runtime@sha256:11a098887c13377c985dae169d7dbbaedc854717b1d277e3cdf5aec45602ce8e';
+
+/** The release's Helm chart (OCI, signed with cosign keyless signing) and its version. */
+export const productChart = 'oci://ghcr.io/ncecere/charts/pi-durable-platform';
+export const productChartVersion = productVersion.replace(/^v/, '');
 
 /** Pi, whose durable package the agents are built with: a separate project by other people. */
 export const piUrl = 'https://github.com/earendil-works/pi';

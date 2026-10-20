@@ -2,5 +2,5 @@
   "title": "Releases",
   "description": "What is in each release",
   "root": true,
-  "pages": ["index", "v0-1-2", "v0-1-1", "v0-1-0"]
+  "pages": ["index", "v0-2-0", "v0-1-2", "v0-1-1", "v0-1-0"]
 }

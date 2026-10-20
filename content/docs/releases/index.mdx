@@ -3,11 +3,12 @@ title: Releases
 description: Pi Durable Platform's releases, the images each one ships, what's planned next, and how the docs follow them.
 ---
 
-These docs describe **Pi Durable Platform v0.1.2**, from 2026-10-19: a fix release on top of v0.1.1 and the first release, v0.1.0.
+These docs describe **Pi Durable Platform v0.2.0**, from 2026-10-20: "Run it anywhere, safely".
 
 | Release | Date | Notes |
 |---|---|---|
-| **v0.1.2** (latest) | 2026-10-19 | [Release notes](/docs/releases/v0-1-2): connecting apps' logos show (served by the platform), the agent page's badge follows wake and hibernate. No migrations. |
+| **v0.2.0** (latest) | 2026-10-20 | [Release notes](/docs/releases/v0-2-0): a Helm chart and a Kustomize base, several replicas, metrics and tracing, `rekey`, platform-chosen thread IDs, group re-checks, a harder agents database and safety fixes. Migration 17. |
+| v0.1.2 | 2026-10-19 | [Release notes](/docs/releases/v0-1-2): connecting apps' logos show (served by the platform), the agent page's badge follows wake and hibernate. No migrations. |
 | v0.1.1 | 2026-10-18 | [Release notes](/docs/releases/v0-1-1): `doctor` checks the agents database, platform staff read any team's agents, the product's logo, console fixes. No migrations. |
 | v0.1.0 | 2026-10-18 | [Release notes](/docs/releases/v0-1-0): the first release |
 
@@ -16,7 +17,9 @@ Each release ships two images, for linux/amd64 and linux/arm64, signed with cosi
 - `ghcr.io/ncecere/pi-durable-platform`: the platform;
 - `ghcr.io/ncecere/pi-durable-platform-runtime`: the agent runtime the platform starts for each agent.
 
-The project's [releases on GitHub](https://github.com/ncecere/pi-durable-platform/releases) carry the image digests, SBOMs and checksums. The full list of changes is the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.1.2/CHANGELOG.md).
+Since v0.2.0, each release also publishes its Helm chart, signed the same way, to `oci://ghcr.io/ncecere/charts/pi-durable-platform`. The chart's version is the release's without the "v" (v0.2.0 is chart 0.2.0).
+
+The project's [releases on GitHub](https://github.com/ncecere/pi-durable-platform/releases) carry the image digests, SBOMs and checksums. The full list of changes is the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.2.0/CHANGELOG.md).
 
 Pi Durable Platform follows semantic versioning. Before 1.0, a minor release may include breaking changes; its notes say how to adapt. Upgrading is described in [Upgrades and migrations](/docs/operate/upgrades).
 
@@ -24,9 +27,10 @@ Pi Durable Platform follows semantic versioning. Before 1.0, a minor release may
 
 The [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) is an order of work, not a schedule. Each item is a GitHub issue with the [`roadmap` label](https://github.com/ncecere/pi-durable-platform/issues?q=is%3Aissue+label%3Aroadmap) and a milestone per phase:
 
+Phase v0.2, "Run it anywhere, safely", shipped in [v0.2.0](/docs/releases/v0-2-0). Next:
+
 | Phase | Theme | Items |
 |---|---|---|
-| v0.2 | Run it anywhere, safely | Deployment manifests (Kustomize and a Helm chart with RBAC and NetworkPolicies), several platform replicas, metrics and tracing, a `rekey` command, platform-chosen thread IDs, re-checking IdP group membership, a hardened agents database, a complete configuration reference |
 | v0.3 | Apps at scale | Paging and search for threads, incremental event streams, steering, idempotent agent creation, OAuth Connect for apps with many people, moving agents between teams, usage for several agents at once |
 | v0.4 | Agents that run on their own | The runtime as a library, so teams can build agents with their own documents, hooks and tasks; triggers (schedules and webhooks) that wake agents and start runs; hibernation that knows about background work; a first-party triage agent and deep-research agent; tool approvals |
 | v0.5 | Files, memory and limits | Files and images on S3-compatible storage, runtime resources per template version, enforced monthly budgets, limits for shared teams, an assistant with memory, agent runtimes registered by platform admins |

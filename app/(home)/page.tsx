@@ -64,7 +64,7 @@ const sections = [
     title: 'Releases',
     href: '/docs/releases',
     icon: <Tag />,
-    description: `What changed in ${productVersion}, from ${productReleaseDate}, what v0.1.0 brought, and how to upgrade.`,
+    description: `What changed in ${productVersion}, from ${productReleaseDate}, what earlier releases brought, and how to upgrade.`,
   },
 ];
 
@@ -120,8 +120,9 @@ export default function HomePage() {
       </Cards>
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
-        Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, a fix
-        release from {productReleaseDate} on top of the first release, v0.1.0. What comes next is in the{' '}
+        Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, from{' '}
+        {productReleaseDate}: deployment manifests, several replicas, metrics and tracing, key rotation and a set
+        of safety fixes. What comes next is in the{' '}
         <a className="text-brand-link underline" href={productRoadmapUrl}>
           roadmap
         </a>{' '}

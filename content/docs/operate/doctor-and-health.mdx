@@ -12,8 +12,10 @@ description: "pi-durable-platform doctor, the /healthz and /readyz probes, logs 
 3. **PostgreSQL**: connects to the platform database and reports its version and the time it took.
 4. **Migrations**: whether the database is at the binary's migration.
 5. **Keys**: which pepper the usable API keys are on, and which `ENCRYPTION_KEY` every stored secret is sealed with.
-6. **Agents database** (since v0.1.1): connects to `AGENTS_DATABASE_URL` and checks that its role can provision agents. It reads the role's attributes and privileges and creates nothing.
-7. **Agent roles**: whether the agents database has roles left behind by agents that no longer exist.
+6. **Group re-check** (with `OIDC_ALLOWED_GROUPS`): how many recently active people the platform can't re-check, because it has no refresh token for them.
+7. **Agents database** (since v0.1.1): connects to `AGENTS_DATABASE_URL` and checks that its role can provision agents. It reads the role's attributes and privileges and creates nothing.
+8. **Agent roles**: whether the agents database has roles left behind by agents that no longer exist.
+9. **Database access**: whether `PUBLIC`, and so an agent's role, may connect to the platform database or to other databases on the agents database's server.
 
 Each check ends as **ok**, **info** (worth knowing), **warn** (something to do, but the platform works) or **fail**. `doctor` exits 1 only when a check fails: a warning exits 0.
 
@@ -25,6 +27,17 @@ Each check ends as **ok**, **info** (worth knowing), **warn** (something to do, 
 | `keys encryption` | Every stored secret is sealed with `ENCRYPTION_KEY` | **Warn** while any value is still sealed with `ENCRYPTION_KEY_PREVIOUS`, naming the columns and counts: run `rekey`, then remove the previous key. **Fail** when a value is sealed with neither key, since the platform can't read it. **Info** when none is under the previous key and `ENCRYPTION_KEY_PREVIOUS` can go |
 
 The `keys encryption` check covers every sealed column that [`rekey`](/docs/operate/key-rotation) knows, including the identity provider refresh tokens that [group re-checks](/docs/operate/oidc#re-checking-groups) keep (`user_idp_tokens`). It reads only the key IDs stored with the values, and opens nothing. See [Rotating keys](/docs/operate/key-rotation).
+
+## The group re-check check
+
+With `OIDC_ALLOWED_GROUPS` set, `auth group re-check` counts the recently active people (a sign-in, a session, or an API key or connected app used in the last 30 days) by whether a refresh token is stored for them.
+
+| Result | Meaning |
+|---|---|
+| **info** | Everyone recently active has a token and is re-checked every interval; or nobody is recently active yet; or the re-check is off (`OIDC_GROUP_RECHECK_INTERVAL=0`) |
+| **warn** | Some recently active people have no stored token. They are never re-checked, and keep access after leaving the allowed group until they sign in again. The fix: add `offline_access` to `OIDC_SCOPES`, allow refresh tokens for this client in your identity provider, and have people sign in again |
+
+Without `OIDC_ALLOWED_GROUPS` there is no such line. See [Re-checking groups](/docs/operate/oidc#re-checking-groups).
 
 ## The agents database checks
 
@@ -48,6 +61,17 @@ Roles are server-wide in PostgreSQL, so dropping or recreating the agents databa
 | **info**, skipped | The platform database is unavailable or its migrations are pending, so the agents' roles are unknown |
 
 See [Databases and roles](/docs/operate/databases#clean-up).
+
+### The database access checks
+
+An agent's role is a login role of the database server. PostgreSQL lets `PUBLIC` connect to every database it creates, so unless you revoke that, an agent's role can open the platform database and take its advisory locks. These checks **warn**, never fail:
+
+| Check | OK when | Otherwise |
+|---|---|---|
+| `postgres public-connect` | `PUBLIC` may not connect to the platform database, or the agents database is on another server | **Warn**, with the fix: `REVOKE CONNECT ON DATABASE <platform database> FROM PUBLIC; GRANT CONNECT ON DATABASE <platform database> TO <the platform's role>;`, and the same grant for any other role that uses it |
+| `agents public-connect` | `PUBLIC` may connect to no other database on the agents database's server | **Warn**, naming those databases: revoke `CONNECT` on them too (and grant it back to the roles that use them), or limit agent roles to the agents database in `pg_hba.conf` |
+
+`doctor` decides whether the two databases share a server by comparing the servers' start times. The second check runs only when they do. See [Where agent roles can connect](/docs/operate/databases#where-agent-roles-can-connect).
 
 ```sh
 pi-durable-platform doctor            # text report

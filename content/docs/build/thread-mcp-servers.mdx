@@ -50,6 +50,10 @@ When the thread already exists, you must be allowed on it:
 | Someone else's, private | `404 thread_not_found`, as on every thread route |
 | Any, with a `visibility` different from its own | `409 visibility_fixed` |
 
+While a thread is reserved (nobody has sent to it yet), only its creator may set or clear its servers. Anyone else gets `404 thread_not_found`, so nobody can add servers that would be active for your first message without you knowing.
+
+If someone else sends the first message to a shared thread you reserved with a client-chosen ID, the message goes through, but the servers you set are dropped: they are never active for their turn. The thread becomes an ordinary shared thread, and the sender's own `mcpServers` in that message apply.
+
 An empty list for an ID with no thread changes nothing and starts nothing. A request with servers the platform refuses (a host that isn't allowed, or a template that doesn't allow them) starts nothing either.
 
 Reading a thread's servers takes the same access as reading the thread.
