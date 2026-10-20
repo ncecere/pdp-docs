@@ -44,12 +44,12 @@ On Kubernetes each runtime is a pod, or a [Kubernetes Agent Sandbox](https://age
 
 ## What it is not, yet
 
-PDP v0.3.0 is pre-1.0 software. It brought paging and search, incremental event streams, steering, safe agent creation, moving agents between teams, and OAuth Connect for apps with many people. Some things are planned and not built:
+PDP v0.4.0 is pre-1.0 software. It brought agents that run on their own: schedules and signed webhooks, agent-made reminders, tool approvals, MCP identity tokens, custom agents built with the runtime library, and the triage and deep researcher kinds. Some things are planned and not built:
 
 - Teams can't upload their own agent code. Agents come from templates: instructions, a model, MCP servers and a kind. An operator can build [a custom agent](/docs/build/custom-agents) into the runtime image for the whole install; choosing a runtime per template needs stronger runtime isolation first.
 - There are no files or images. Messages are text.
 - Budgets are enforced per trigger and per agent's triggered runs only: personal workspaces record a monthly budget but don't enforce it, and teams have none yet.
 
-See the known limitations in [Release notes v0.3.0](/docs/releases/v0-3-0#known-limitations) (and those of [v0.2.0](/docs/releases/v0-2-0#known-limitations) and [v0.1.0](/docs/releases/v0-1-0#known-limitations) that remain), and the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) for the order in which they're planned.
+See the known limitations in [Release notes v0.4.0](/docs/releases/v0-4-0#known-limitations) (and those of [v0.3.0](/docs/releases/v0-3-0#known-limitations), [v0.2.0](/docs/releases/v0-2-0#known-limitations) and [v0.1.0](/docs/releases/v0-1-0#known-limitations) that remain), and the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) for the order in which they're planned.
 
 Next: [Concepts](/docs/get-started/concepts).

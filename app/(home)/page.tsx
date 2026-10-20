@@ -31,7 +31,7 @@ const sections = [
     href: '/docs/teams',
     icon: <Users />,
     description:
-      'Deploying agents from the catalog, team templates and review, the team’s own models and MCP servers, service accounts, usage, the audit log and limits.',
+      'Deploying agents from the catalog, team templates and review, triage and deep researcher agents, triggers and runs, tool approvals, the team’s own models and MCP servers, service accounts, usage, the audit log and limits.',
   },
   {
     title: 'Administer',
@@ -52,7 +52,7 @@ const sections = [
     href: '/docs/build',
     icon: <Code2 />,
     description:
-      'Reaching agents from your own app: keys and OAuth Connect, apps with many people, agents by key and safe retries, threads and messages, event streams, private threads, thread MCP servers, errors and limits.',
+      'Reaching agents from your own app: keys and OAuth Connect, apps with many people, agents by key and safe retries, threads and messages, event streams, agent state, webhooks and callbacks, errors and limits; building a custom agent, and MCP identity tokens for MCP servers.',
   },
   {
     title: 'API reference',
@@ -121,8 +121,9 @@ export default function HomePage() {
 
       <p className="mt-12 text-sm text-fd-muted-foreground">
         Pi Durable Platform is pre-1.0 development software. These docs describe {productVersion}, from{' '}
-        {productReleaseDate}: paging and search, incremental event streams, steering, safe agent creation, moving
-        agents, OAuth Connect for apps with many people, and a set of safety fixes. What comes next is in the{' '}
+        {productReleaseDate}: agents that run on their own, with schedules, signed webhooks and their own reminders,
+        tool approvals, MCP identity tokens, custom agents built with the runtime library, and the triage and deep
+        researcher kinds. What comes next is in the{' '}
         <a className="text-brand-link underline" href={productRoadmapUrl}>
           roadmap
         </a>{' '}

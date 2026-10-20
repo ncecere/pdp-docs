@@ -5,7 +5,7 @@ description: "How Pi Durable Platform's database migrations work, upgrading the 
 
 ## Migrations
 
-The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0, v0.1.1 and v0.1.2 have 16 (v0.1.1 and v0.1.2 added none). v0.2.0 adds migration 17, and v0.3.0 adds 18 to 20.
+The platform database's schema is managed by migrations built into the binary. They are forward-only: a release never edits a migration an earlier release applied, it adds the next one. v0.1.0, v0.1.1 and v0.1.2 have 16 (v0.1.1 and v0.1.2 added none). v0.2.0 adds migration 17, v0.3.0 adds 18 to 20, and v0.4.0 adds 21 to 26.
 
 Apply them either way:
 
@@ -45,6 +45,18 @@ Run `doctor`, then deploy and test an agent.
 
 </Step>
 </Steps>
+
+## Upgrading to v0.4
+
+v0.4.0 lets agents run on their own and adds settings. The [release notes](/docs/releases/v0-4-0#upgrading-from-v030) have the steps in order.
+
+- **Migrations 21 to 26.** 21 adds the MCP identity signing keys and each MCP server's identity settings; 22 triggers, their agents' limits and runs; 23 the runtime versions that wrote each agent's data; 24 tool approvals and template versions' approval settings; 25 agent-made schedules and the agent as an audit actor; 26 template versions' kind and settings. Existing templates keep behaving as before: no approvals, no schedules, the assistant kind.
+- **New settings**, all with defaults: `AGENTS_BACKGROUND_MAX` (2 hours; the chart's `agents.backgroundMax`), `TRIGGERS_INTERVAL`, `TRIGGERS_MAX_RUN_TIME`, `TRIGGERS_MAX_CONCURRENT_RUNS`, `TRIGGERS_PAUSE_AFTER_FAILURES`, `TRIGGERS_AGENT_MAX` and `TRIGGERS_AGENT_MIN_INTERVAL`. See [Configuration](/docs/operate/configuration#triggers).
+- **MCP identity tokens are on** for every server in proxy mode, in their own header (`MCP-Gateway-Identity`); `Authorization` is unchanged. The platform creates its signing key at first start; `doctor`'s `keys mcp-identity` check reports it, and `rotate-mcp-identity-key` rotates it ([Rotating keys](/docs/operate/key-rotation#the-mcp-identity-signing-key)). MCP servers that verify the token must reach `APP_URL`.
+- **Webhook addresses** (`/v1/hooks/…`) are served on the platform's public port: your ingress must route them like the rest of `/v1`.
+- **Agents upgrade as they wake.** Approvals, kinds, agent-made schedules, tool details, exposed documents and background-work reports need the v0.4 runtime. An agent that was running when you upgraded keeps its old runtime until it hibernates.
+- **The upgrade check.** From its first start on the v0.4 runtime, an agent is refused on an older runtime (`409 runtime_too_old`). Don't roll the runtime image back on its own. A wrong record is reset with `pi-durable-platform reset-storage-version --agent <id>`.
+- **Rolling back** to v0.3.0's images (both of them) works on the schema at migration 26: triggers don't fire, approvals and kinds are ignored, and MCP servers get no identity tokens until you upgrade again.
 
 ## Upgrading to v0.3
 
@@ -87,10 +99,12 @@ Open event streams end when a platform pod stops; clients reconnect to the new o
 
 Migrations don't go backwards. To return to an older version after a migration ran, restore the databases from the backup you took before the upgrade.
 
+From v0.4.0 to v0.3.0, the old images run on the schema at migration 26 and ignore the new tables and columns. Roll back both images together: the v0.4 platform refuses an older runtime for agents a v0.4 runtime has written. See [Rolling back](/docs/releases/v0-4-0#rolling-back) in the v0.4.0 release notes.
+
 From v0.3.0 to v0.2.0, the old images run on the schema at migration 20. They ignore the new columns and tables, and treat every keyed agent as service-managed. See [Rolling back](/docs/releases/v0-3-0#rolling-back) in the v0.3.0 release notes.
 
 From v0.2.0 to v0.1.2, the old images also run on the new schema, which stays at migration 17, with two effects. v0.1.2 ignores group denials, so people who lost access get their API keys back until you upgrade again. And a request that sets MCP servers on a thread with no record fails. See [Rolling back](/docs/releases/v0-2-0#rolling-back) in the release notes.
 
 ## Pi's durable package
 
-The runtime pins Pi's durable package (1.3.0 in v0.2.0 and v0.3.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL.
+The runtime pins Pi's durable package (1.3.0 in v0.2.0 to v0.4.0) and stores its state in PostgreSQL through a small SQL layer. Upgrading that package comes with a platform release, after Pi's own storage conformance suite passes on PostgreSQL. Since v0.4 it is a one-way step for each agent: once a runtime with a newer package has written an agent's data, the platform refuses older runtimes for it (see [Building a custom agent](/docs/build/custom-agents#upgrades)).

@@ -77,9 +77,15 @@ Behind a connection pooler, the listening and lock connections must be **session
 
 ## Upgrading with several replicas
 
-A rolling upgrade has both versions running for a while. From v0.2 to v0.3 that is safe: a v0.2 replica that creates an agent by key after migrations 18 to 20 still gets a service-managed one, because the database sets it. See [Upgrading to v0.3](/docs/operate/upgrades#upgrading-to-v03).
+A rolling upgrade has both versions running for a while. From v0.3 to v0.4 the migrations only add tables and columns with defaults, so v0.3 replicas keep working; but until every replica runs v0.4, MCP requests that reach a v0.3 replica's gateway carry no identity token, and only v0.4 replicas fire triggers and deliver approvals. Finish the rollout before you set up triggers, approvals or kinds. See [Upgrading to v0.4](/docs/operate/upgrades#upgrading-to-v04).
+
+From v0.2 to v0.3 that is safe: a v0.2 replica that creates an agent by key after migrations 18 to 20 still gets a service-managed one, because the database sets it. See [Upgrading to v0.3](/docs/operate/upgrades#upgrading-to-v03).
 
 From v0.1 to v0.2, migration 17 changes how a thread's MCP servers are stored, and requests that set MCP servers on a thread that has no record fail against the new schema until every replica runs the new version. See [Upgrading to v0.2](/docs/operate/upgrades#upgrading-to-v02).
+
+## Triggers and approvals
+
+Since v0.4 every replica runs the trigger loop (every `TRIGGERS_INTERVAL`), and one replica at a time does its work, as with the reaper; the approvals loop runs on every replica every 30 seconds. Correctness doesn't rest on the turns: a schedule's fire, a webhook's delivery and an approval's time-out each change one row once, so two replicas never start one run twice. Webhook rate limits are shared through PostgreSQL, like the API's.
 
 ## Check it
 

@@ -1,0 +1,156 @@
+---
+title: Release notes v0.4.0
+description: "Pi Durable Platform v0.4.0 (2026-10-20), Agents that run on their own: custom agents with the runtime library, triggers (schedules and signed webhooks) and agent-made schedules, background-aware hibernation, tool approvals, MCP identity tokens, and the triage and deep researcher kinds; upgrading from v0.3.0, the images, the chart and verifying them."
+---
+
+Pi Durable Platform v0.4.0, released on 2026-10-20, is "Agents that run on their own", on top of [v0.3.0](/docs/releases/v0-3-0). Agents can now start work without a person, on a schedule or when a signed webhook arrives, and set their own reminders. A person can approve sensitive tool calls before they run. MCP servers learn which person a call is for, from a token the platform signs. The agent runtime is a library, so operators can build agents with their own tools, state and guards, and two agents built with it ship as template kinds: a triage agent and a deep researcher. Unattended runs use the team's credentials, never a person's.
+
+It includes **database migrations 21 to 26** and new settings. Read [Upgrading from v0.3.0](#upgrading-from-v030) first.
+
+## What changed
+
+### Agents that run on their own
+
+- **Triggers** (#15). A team's owners and admins give an agent **schedules** (cron in an IANA time zone, with a policy for times missed while the platform was down) and **webhooks** (an address per trigger, `POST /v1/hooks/{hookId}`, with an HMAC-SHA256 signature over the time and the body, a 5 minute window, replays answered with the first run, and an optional filter). Each fire sends the agent a message from a text template, as the trigger, never as a person, with the team's models and MCP servers. Each fire is a **run** with its status, reason and cost, in the agent's **Triggers** and **Runs** tabs and the API (`/v1/agents/{agentId}/triggers`, `…/runs`, `/v1/teams/{team}/runs`). Limits hold: runs at once, a maximum run time, daily budgets per trigger and per agent, pauses, and back-off that pauses a trigger after repeated failures. A trigger can call your system back, signed, when each run ends. See [Triggers and runs](/docs/teams/triggers) and [Webhooks and completion callbacks](/docs/build/webhooks).
+- **Agent-made schedules.** A template version can let its agents schedule their own reminders and recurring work with `schedule`, `list_schedules` and `cancel_schedule`. They are the agent's own triggers, within the limits, listed in its **Triggers** tab as made by the agent, and owners and admins can pause or delete them. See [Agent-made schedules](/docs/teams/triggers#agent-made-schedules).
+- **Background-aware hibernation** (#34). The runtime reports background work (background subagents, tasks, tool calls still running after their reply) and the reaper keeps the agent awake for it, up to `AGENTS_BACKGROUND_MAX` (2 hours by default). Past it the work is aborted, audited, and the agent may hibernate. Work that only waits for a person doesn't keep an agent awake. The agent's **Overview** says what keeps it awake. See [Concepts](/docs/get-started/concepts#hibernating-runtimes).
+
+### Tool approvals
+
+- **A person approves listed tools before they run** (#16). A template version lists tools (names or `*` patterns), who else may decide in shared conversations, and a time-out. The call waits, durably: across restarts and hibernation, and a decision wakes the agent. Decide in the conversation, in the agent's **Approvals** tab, or through the API (`/v1/me/approvals`, `/v1/agents/{agentId}/approvals`). A denied or timed-out call is refused and the agent told why. Unattended runs' calls are the owners' and admins' to decide. See [Tool approvals](/docs/teams/tool-approvals).
+
+### MCP servers learn who a call is for
+
+- **MCP identity tokens** (#57). In proxy mode, every request the gateway forwards to an MCP server carries `MCP-Gateway-Identity`: an ES256 JWT naming the agent, its team, the thread's visibility and, from the platform's own records, the person (a personal workspace's owner, or a private thread's creator) with `person_present`. Servers verify it with `<APP_URL>/.well-known/mcp-identity-jwks.json`. Each server has **Identity** settings: send the token (on by default), its audience, and the person's email (off by default). The platform makes and rotates its signing key (`rotate-mcp-identity-key`). See [MCP identity tokens](/docs/build/mcp-identity).
+
+### Custom agents and the first-party kinds
+
+- **The runtime as a library** (#28). `@pdp/runtime` (`defineAgent`, tools, documents, hooks, subagents, approvals) with the platform's assistant as its default composition, a test kit (`@pdp/runtime/testing`: a fake model, in-memory storage, restart tests, the runtime contract's conformance suite), the written runtime contract (version 2), and a starter project (`examples/custom-agent/`). An operator builds a custom agent into the runtime image. See [Building a custom agent](/docs/build/custom-agents).
+- **Custom state for apps.** Tools return `details` for apps, on tool calls in the view and both stream formats. Agents expose conversation documents, read with `GET /v1/agents/{agentId}/threads/{threadId}/documents/{kind}`, with revisions in the view and a `document.updated` delta event. See [Agent state for apps](/docs/build/agent-state).
+- **The upgrade check.** The platform records, per agent, the newest version of Pi's durable package that wrote its data, and refuses an older runtime (`409 runtime_too_old`, shown on the agent's Overview) instead of letting it fail on every read. `pi-durable-platform reset-storage-version` fixes a wrong record.
+- **Agent kinds** (#35). A template version has a kind: **Assistant**, **Triage** (keeps a queue of a tracker's items, drafts, and asks before every write) or **Deep researcher** (a plan, parallel subagents, sources, a report). Both are built with the library's public exports, ship in the standard runtime image, and show their documents beside the conversation. See [Triage and deep researcher agents](/docs/teams/agent-kinds).
+
+### In the console
+
+- An agent has **Approvals**, **Triggers** and **Runs** tabs; its Overview says what keeps it awake, or why it can't start on its runtime.
+- The template editor offers the kind and its settings, the tools to approve, and the schedules switch.
+- The test chat shows tool details, waiting approvals with **Approve** and **Deny**, triggers as authors, and the conversation's exposed documents beside the chat.
+- MCP servers' **Settings** have the **Identity** settings. The audit log has labels for every new action, and shows an agent as the actor of its own schedules.
+
+### Security
+
+These came from reviewing this release before it shipped.
+
+- The upgrade check records a reported durable package version only within one minor version of the platform's own, so code in a runtime can't make the platform refuse every genuine runtime; an operator can reset a wrong record (audited).
+- An agent can't set a schedule from someone's private thread in a shared team. An agent-made schedule's message is withheld from platform staff and from those who can't read the thread it was set in.
+- Only verified webhook deliveries count against an address's limit, so someone with a leaked address but not the secret can't keep the real sender out; every request also counts per address and client address.
+
+The full list is in the repository's [CHANGELOG.md](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/CHANGELOG.md) and its [release notes](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/releases/v0.4.0.md).
+
+## Upgrading from v0.3.0
+
+<Steps>
+<Step>
+
+**Back up the platform database.**
+
+</Step>
+<Step>
+
+**Replace both images**, the platform and the runtime, by digest, and restart. The platform applies six migrations when it starts:
+
+- 21: the MCP identity signing keys, and each MCP server's identity settings (send the token: on);
+- 22: triggers, their agents' limits, and runs;
+- 23: the runtime versions that have written each agent's data (the upgrade check);
+- 24: tool approvals, and the approval settings of template versions;
+- 25: agent-made schedules, and the agent as an audit actor;
+- 26: template versions' kind and settings (every existing version is an assistant).
+
+Nothing changes for existing agents and templates: no version asks for approvals, lets its agents schedule, or has a kind other than the assistant until someone makes one that does. Finish the rollout before you set up triggers, approvals or kinds.
+
+</Step>
+<Step>
+
+**Review the new settings.** `AGENTS_BACKGROUND_MAX` (2 hours; the chart's `agents.backgroundMax`) and the triggers' ceilings, `TRIGGERS_*`. The defaults suit most installs. See [Configuration](/docs/operate/configuration#triggers).
+
+</Step>
+<Step>
+
+**MCP servers start receiving identity tokens.** The platform creates its signing key when it first starts. Every proxied request to a server now carries `MCP-Gateway-Identity`, in a header of its own: `Authorization` is unchanged, so servers that don't know the token ignore it. Turn **Send the identity token** off for servers outside your organisation. Servers that verify tokens must reach the platform's `APP_URL`. Run `doctor`: its `keys mcp-identity` check says which key signs.
+
+</Step>
+<Step>
+
+**Agents upgrade as they wake.** Tool details, exposed documents, approvals, kinds, agent-made schedules and the background-work report are the v0.4 runtime's. An agent that was running when you upgraded keeps its old runtime until it hibernates: until then it doesn't ask for approvals, runs as the assistant whatever its kind, and is judged for hibernation by the old rule. Hibernate running agents to move them at once. Each agent's first start on the v0.4 runtime records its version for the upgrade check.
+
+</Step>
+<Step>
+
+**Custom runtime images** must be rebuilt on the v0.4.0 runtime image and use the library. See [Building a custom agent](/docs/build/custom-agents).
+
+</Step>
+</Steps>
+
+More detail is in [Upgrades and migrations](/docs/operate/upgrades#upgrading-to-v04).
+
+### Rolling back
+
+Roll back **both images together**. v0.3.0's images run on the schema at migration 26 and ignore the new tables and columns: triggers don't fire and webhook addresses answer `404`, template versions' approvals and kinds are ignored, and MCP servers get no identity tokens. Pending runs and approvals stay recorded for when you upgrade again.
+
+Don't roll back only the runtime image: v0.4's platform refuses to start an agent on a runtime that doesn't report its version once a v0.4 runtime has written the agent's data (`409 runtime_too_old`).
+
+## Known limitations
+
+Unchanged from [v0.3.0](/docs/releases/v0-3-0#known-limitations), except these, which this release resolves: agents couldn't wake themselves for scheduled work, every agent was the same program, and tools couldn't wait for a person.
+
+New or remaining:
+
+- **Custom agents are per install.** The runtime image is the operator's choice, and every agent runs it. A template version choosing a registered runtime is planned (#29); teams can't upload code.
+- **A run's cost** is the agent's usage while the run was in progress, so a run that overlaps other work of the same agent counts it too. Usage isn't recorded per thread.
+- **Budgets** are enforced for triggered runs only (per trigger and per agent). Team and personal workspace budgets are planned for v0.5.
+- **Webhook senders must sign in Pi Durable Platform's scheme**: a sender that signs its own way needs a relay that re-signs.
+- **Callbacks** may arrive twice; de-duplicate by `X-PDP-Delivery`.
+- **Approvals** are one decision per call: there is no "approve for this thread". They aren't announced on the stream of every thread.
+- **The MCP identity token** trusts the runtime to name the thread a call belongs to, among its own agent's threads (see [MCP identity tokens](/docs/build/mcp-identity#a-known-limit)). Direct-mode servers and apps' thread servers get no token.
+- **The triage queue** is per conversation: point a triage agent's triggers at one shared thread. Background subagents can't be stopped from the console.
+- **Rolling a runtime back** after it has written an agent's data is not supported.
+
+The project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) plans the rest; v0.5 is about files, memory and limits. Each item is a GitHub issue with the [`roadmap` label](https://github.com/ncecere/pi-durable-platform/issues?q=is%3Aissue+label%3Aroadmap).
+
+## Images and chart
+
+| Artifact | |
+|---|---|
+| `ghcr.io/ncecere/pi-durable-platform:v0.4.0` | The platform: distroless, user 65532, read-only root filesystem |
+| `ghcr.io/ncecere/pi-durable-platform-runtime:v0.4.0` | The agent runtime and the runtime library: Node.js 22, user 10001, read-only root filesystem with a writable `/tmp` |
+| `oci://ghcr.io/ncecere/charts/pi-durable-platform`, version `0.4.0` | The Helm chart |
+
+Both images are tagged `v0.4.0` and `latest`, for linux/amd64 and linux/arm64. Deploy by digest. The digests are on the [GitHub release](https://github.com/ncecere/pi-durable-platform/releases/tag/v0.4.0), in its `<image>-v0.4.0.digest.txt` assets. Install the chart with the images pinned:
+
+```sh
+helm install pi-durable-platform oci://ghcr.io/ncecere/charts/pi-durable-platform --version 0.4.0 \
+  -n pi-durable-platform -f values.yaml \
+  --set images.platform.digest=sha256:<the platform image's digest> \
+  --set images.runtime.digest=sha256:<the runtime image's digest>
+```
+
+## Verifying the images and the chart
+
+Verify the signatures with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) **v3.0 or newer** (keyless, GitHub Actions OIDC). The images are signed by the `image.yml` workflow, the chart by `chart.yml`:
+
+```sh
+for image in pi-durable-platform pi-durable-platform-runtime; do
+  cosign verify ghcr.io/ncecere/$image:v0.4.0 \
+    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/v0.4.0 \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+done
+cosign verify ghcr.io/ncecere/charts/pi-durable-platform:0.4.0 \
+  --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/chart.yml@refs/tags/v0.4.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Each image carries its SBOM (SPDX) and build provenance as attestations, and the release has each image's SBOM per platform with `checksums.txt`. `pi-durable-platform version` prints `pi-durable-platform 0.4.0 (<commit>)`; the runtime image is labelled `org.opencontainers.image.version=0.4.0`.
+
+## Reporting problems
+
+Open an issue at [github.com/ncecere/pi-durable-platform/issues](https://github.com/ncecere/pi-durable-platform/issues). Report security problems privately, as the repository's [SECURITY.md](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/SECURITY.md) describes.
