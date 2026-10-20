@@ -60,6 +60,9 @@ An app secret lets a trusted app call the platform **as itself**: one event stre
 
 An app has at most two secrets, so it can rotate: issue a new one, have the app move to it, then delete the old one.
 
+Removing an app from **Trusted apps** deletes its secrets at once (each deletion is in the audit log). If you trust the
+app again later, issue it a new secret: the old ones don't come back.
+
 A secret works only while its app is on the trusted list. Taking the app off the list **deletes its secrets**, in the same save: the confirmation says so, and each deletion is in the audit log. Trusting the app again doesn't bring them back: issue new ones. So taking an app off the list is also how you cut off a leaked secret for good.
 
 <Callout type="warn" title="A secret sees everyone who connected the app">
