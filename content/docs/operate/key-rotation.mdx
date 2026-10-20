@@ -1,13 +1,13 @@
 ---
 title: Rotating keys
-description: "Rotate Pi Durable Platform's two keys: re-seal every stored secret under a new ENCRYPTION_KEY with the rekey command, move to a new API_KEY_PEPPER, and check each step with doctor."
+description: "Rotate Pi Durable Platform's keys: re-seal every stored secret under a new ENCRYPTION_KEY with the rekey command, move to a new API_KEY_PEPPER, rotate the MCP identity signing key, and check each step with doctor."
 ---
 
-Two keys protect what the platform's database holds. They rotate differently.
+Two keys protect what the platform's database holds. They rotate differently. A third, the [MCP identity signing key](#the-mcp-identity-signing-key), is made and stored by the platform itself.
 
 | Key | Protects | How it rotates |
 |---|---|---|
-| `ENCRYPTION_KEY` | Secrets the platform must use again: model provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, and the identity provider refresh tokens kept for [group re-checks](/docs/operate/oidc#re-checking-groups). They are sealed with AES-256-GCM | `pi-durable-platform rekey` re-seals them under the new key |
+| `ENCRYPTION_KEY` | Secrets the platform must use again: model provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, the identity provider refresh tokens kept for [group re-checks](/docs/operate/oidc#re-checking-groups), triggers' webhook and callback secrets, triggered runs' messages until they are delivered, and the MCP identity signing keys. They are sealed with AES-256-GCM | `pi-durable-platform rekey` re-seals them under the new key |
 | `API_KEY_PEPPER` | The digests of API keys, service account keys and OAuth Connect tokens and codes. Digests can't be reversed | Each moves to the new pepper the next time it is used |
 
 Both keys are 32 random bytes in base64: `openssl rand -base64 32`.
@@ -40,9 +40,13 @@ model_providers.api_key_enc               0         3           0
 model_providers.headers_enc               0         2           0
 mcp_servers.headers_enc                   0         4           0
 thread_mcp_servers.headers_enc            0         1           0
+agent_triggers.webhook_secret_enc         0         2           0
+agent_triggers.callback_secret_enc        0         1           0
+trigger_runs.message_enc                  0         0           0
 user_idp_tokens.refresh_token_enc         0        40           0
+mcp_identity_keys.private_key_enc         0         1           0
 
-dry run: 0 value(s) under ENCRYPTION_KEY, 74 under the previous key (a run would re-seal them), 0 unreadable
+dry run: 0 value(s) under ENCRYPTION_KEY, 78 under the previous key (a run would re-seal them), 0 unreadable
 ```
 
 (The counts here are an example.) An **unreadable** value opens with neither key: a missing `ENCRYPTION_KEY_PREVIOUS`, a third key, or damage. Fix that before you go on.
@@ -107,6 +111,24 @@ Keys, tokens and codes made with the old pepper keep working, and are re-digeste
 </Steps>
 
 Changing `API_KEY_PEPPER` **without** keeping the old value as `API_KEY_PEPPER_PREVIOUS` invalidates every API key, service account key and app token at once.
+
+## The MCP identity signing key
+
+Since v0.4 the platform signs the [identity tokens](/docs/build/mcp-identity) MCP servers receive with a P-256 key it makes itself, the first time `serve` starts, under a database lock so replicas make one. The private key is sealed with `ENCRYPTION_KEY` (so `rekey` re-seals it). Servers verify tokens with the public keys at `<APP_URL>/.well-known/mcp-identity-jwks.json`, which lists the key that signs now, keys that will sign, and keys that stopped signing in the last hour. Servers cache it for up to five minutes.
+
+Rotate it with:
+
+```sh
+kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform rotate-mcp-identity-key
+```
+
+| Flag | |
+|---|---|
+| `--prepublish 24h` (default) | The new key is published now and starts signing after this long (at least 10 minutes), so servers' cached key sets already hold it. The previous key stays published for an hour after it stops |
+| `--now` | Sign with the new key at once. A server meets an unknown key ID and fetches the set again |
+| `--now --drop-previous` | For a leaked key: also remove every other key from the set at once. Tokens signed with the old key stop verifying |
+
+Keys that stopped signing more than a day ago are deleted by the next rotation. Every replica switches keys at the same moment, by time. Each rotation is audited (**Rotated the MCP identity signing key**). `doctor`'s `keys mcp-identity` check warns when the signing key is older than 90 days.
 
 ## The example keys
 

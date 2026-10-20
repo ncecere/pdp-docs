@@ -20,10 +20,13 @@ The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_gr
 | Status | Codes | What to do |
 |---|---|---|
 | `400` | `invalid_text`, `invalid_thread_id`, `invalid_visibility`, `invalid_title`, `invalid_name`, `invalid_external_key`, `invalid_group_by`, `invalid_range`, `invalid_cursor`, `invalid_query`, `invalid_idempotency_key`, `invalid_format`, `unsupported_version`, … | Fix the request |
+| `400` | `invalid_kind`, `invalid_kind_settings` | A template version's [kind](/docs/teams/agent-kinds) or its settings aren't valid |
 | `401` | `unauthorized` | The key or token is invalid, expired or revoked. For an OAuth token, refresh once, then reconnect ([OAuth Connect](/docs/build/oauth-connect#7-handle-a-refused-token)). |
 | `403` | `forbidden`, `person_required` | The caller's role doesn't allow it, or a service account called a route about a person (or tried to move an agent) |
 | | `insufficient_scope` | An app's token with scope `agents:read` tried anything but a read. Ask the person to connect it with `agents` |
-| `404` | `agent_not_found`, `thread_not_found`, `team_not_found`, `template_not_found`, … | Doesn't exist, **or** the caller may not see it (another team's agent, another's private thread) |
+| | `approval_forbidden` | The caller may see the [tool approval](/docs/teams/tool-approvals) but not decide it |
+| `404` | `agent_not_found`, `thread_not_found`, `team_not_found`, `template_not_found`, `approval_not_found`, `trigger_not_found`, `run_not_found`, … | Doesn't exist, **or** the caller may not see it (another team's agent, another's private thread) |
+| | `document_not_found` | The agent doesn't expose that document, or the thread doesn't have it ([Agent state for apps](/docs/build/agent-state)) |
 | `409` | `visibility_fixed` | The thread's visibility was set when it started (by `POST …/threads`, its first message, or its MCP servers) and a request asked for another |
 | | `agent_disabled` | The agent is turned off |
 | | `agent_model_unavailable`, `model_unavailable` | The model isn't available to the team or workspace |
@@ -31,9 +34,12 @@ The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_gr
 | | `too_many_agents`, `limit_reached` | The team (50) or the personal workspace (`maxAgents`) is full |
 | | `too_many_running` | A personal workspace is at `maxRunning`: close streams, or wait for an agent to hibernate |
 | | `team_archived` | The team is archived and read-only |
+| | `runtime_too_old` | The agent's data was written by a newer runtime than the one the platform would start: the operator must deploy a current runtime ([Building a custom agent](/docs/build/custom-agents#upgrades)) |
+| | `approval_decided` | The approval was already decided, timed out or cancelled |
 | | `agent_service_managed`, `move_template_unavailable`, `move_model_unavailable`, `move_same_team` | A move that can't be done: see [Moving an agent](/docs/use/moving-an-agent#what-the-target-must-offer) |
 | `412` | `revision_conflict` | Someone changed it since you read it: read it again and retry |
 | `422` | `idempotency_key_reused` | The `Idempotency-Key` was used for a different request: choose a new key ([Creating agents safely](/docs/build/creating-agents)) |
+| | `document_too_large` | The document is larger than the bound the agent set for it |
 | `428` | `revision_required` | Send `If-Match` with the revision |
 | `429` | `rate_limited` | Wait `Retry-After` seconds |
 | `502`, `503` | `agent_unavailable` | The agent couldn't be started, or didn't answer. Retry with backoff. |
@@ -45,6 +51,7 @@ The OAuth endpoints answer in OAuth's own format instead: `{"error": "invalid_gr
 - **App secrets**: the same number, per secret.
 - **OAuth endpoints**: 60 requests a minute per client address for authorize, token and revoke; 10 for registration (`429 slow_down`).
 - **Sign-in**: `LOGIN_ATTEMPTS_PER_MINUTE` (20) per client address.
+- **Webhook addresses**: 120 verified deliveries a minute per address, and 240 requests a minute per address and client address ([Webhooks](/docs/build/webhooks#rate-limits)).
 
 Opening an event stream counts as one request, however long it stays open. Over a limit, the answer is `429` with `Retry-After` in seconds. The counters are kept in PostgreSQL.
 

@@ -1,0 +1,78 @@
+---
+title: Agent state for apps
+description: "Reading what a Pi Durable Platform agent keeps beside the conversation: tool details on tool calls, exposed documents through the documents endpoint, their revisions and the document.updated event."
+---
+
+Some Pi Durable Platform agents keep state beside the transcript: the [triage agent](/docs/teams/agent-kinds#triage)'s queue, the [deep researcher](/docs/teams/agent-kinds#deep-researcher)'s plan and sources, or whatever a [custom agent](/docs/build/custom-agents) keeps. Your app can read it in two ways, both through the platform and with exactly the access that reading the thread needs: another person's private thread isn't found.
+
+## Tool details
+
+A tool can return structured `details` for apps alongside its result. The model never sees them. They appear:
+
+- on the tool's result message in the thread's view (`details`);
+- on the current round's running tool (`tools[].details`);
+- in both [event formats](/docs/build/events): in whole views, and in `message.added`, `tool.updated` and `tool.finished` deltas (`details`; `null` means none).
+
+Details are JSON, at most 16 KiB each. Larger ones are left out, and `detailsOmitted: true` says so. The console's test chat shows them, raw, as **Details** in the tool call's card.
+
+```json
+{"role": "tool", "toolCallId": "c1", "name": "board", "isError": false,
+ "text": "Open tasks: …", "details": {"action": "add", "open": 1, "done": 0}}
+```
+
+## Exposed documents
+
+An agent opts in to exposing some of its conversation documents. Read one with:
+
+```sh
+curl https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/documents/research.plan \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{"data": {"kind": "research.plan", "version": 1, "revision": "…", "value": {"question": "…", "steps": […]}}}
+```
+
+| Field | |
+|---|---|
+| `kind` | The document's kind, as the agent defines it |
+| `version` | The version of its shape. Values are migrated to the agent's current version when read |
+| `revision` | A hash of its content: it changes when the document does |
+| `value` | The document, as JSON |
+
+- A kind the agent doesn't expose, or that the thread doesn't have, is `404 document_not_found`. The durable package's and the platform's own documents (`pi.*`, `pdp.*`) are never exposed.
+- A document larger than the bound its author set (64 KiB by default, 1 MiB at most) is `422 document_too_large`. It is never cut.
+- Reading a document wakes the agent, like reading the conversation.
+
+Only conversation documents can be exposed. A document shared by every thread of an agent would show other threads' state, private ones included, to anyone who can read one thread.
+
+### Knowing when one changed
+
+The thread's view lists its exposed documents and their revisions, in whole views and snapshots alike:
+
+```json
+{"busy": false, "messages": […], "tools": [], "documents": {"research.plan": {"revision": "…"}, "research.sources": {"revision": "…"}}}
+```
+
+The [delta stream](/docs/build/events#event-types) sends `document.updated` with `kind` and `revision` when one changes. The event never carries the document: read it again when the revision differs from the one you have. A document that disappears comes as a new snapshot.
+
+```ts
+case "document.updated":
+  return { ...view, documents: { ...view.documents, [e.kind]: { revision: e.revision } } };
+```
+
+The console does exactly this: the conversation shows the thread's exposed documents beside the chat (the triage queue as a table, the research plan as a checklist, its sources as a list, any other document as JSON) and reloads one when its revision changes.
+
+### Platform admins
+
+Platform roles never reach documents, except a platform admin's reasoned read (`POST /v1/admin/agents/{agentId}/threads/{threadId}/documents/{kind}/read` with a `reason`), recorded in the team's audit log as `thread.admin_read` with the document's kind. See [Reading conversations](/docs/administer/reading-conversations).
+
+## Agent kinds' documents
+
+| Kind | Document | What it holds |
+|---|---|---|
+| Triage | `triage.queue` | The items the agent has seen: ID, title, URL, status (`new`, `triaged`, `drafted`, `waiting_approval`, `done`, `skipped`), decision, drafted labels, reply and summary |
+| Deep researcher | `research.plan` | The question and its steps (`s1`, `s2`, …), each with a status (`pending`, `running`, `done`, `skipped`), the subagent answering it and a note |
+| Deep researcher | `research.sources` | Each source's URL and title, the claims it supports and the step |
+
+A custom agent's documents are whatever its author defines; its `details` too. See [Building a custom agent](/docs/build/custom-agents).

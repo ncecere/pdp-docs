@@ -18,18 +18,20 @@ Every action has a label in the log (since v0.1.1, agents, templates, model prov
 | User access (identity provider groups) | `user.group_denied` (Ended access: no longer in an allowed group; by the system, with the reason and how many connected apps were disconnected), `user.group_restored` (Restored access: back in an allowed group; by the person signing in, or by the system when `OIDC_ALLOWED_GROUPS` was removed) |
 | Teams | `team.create`, `team.update`, `team.archive`, `team.owner_assign`, `team.member_*`, `team.invite_*`, `team.personal_create`, `team.personal_limits` |
 | Keys and service accounts | `api_key.*`, `service_account.*`, `service_account_key.*`, and `*.pepper_rehash` after a pepper rotation |
-| Agents | `agent.create` (Deployed agent), `agent.update` (Changed agent), `agent.move` (Moved agent to another team: in both teams' logs), `agent.delete` (Deleted agent) |
+| Agents | `agent.create` (Deployed agent), `agent.update` (Changed agent), `agent.move` (Moved agent to another team: in both teams' logs), `agent.delete` (Deleted agent), and since v0.4 `agent.runtime_recorded`, `agent.runtime_refused` (Refused an older runtime for the agent), `agent.storage_version_reset` (by an operator's `reset-storage-version`) and `agent.background_abort` (Stopped an agent's background work past the time limit; by the system) |
+| Triggers and runs, Trigger limits | Since v0.4: `trigger.create`, `trigger.update`, `trigger.delete`, `trigger.secret_rotate`, `trigger.fire` (Ran trigger now), `trigger.run` (Trigger started a run; by the system), `trigger.run_stop`, `trigger.auto_pause`, `trigger_settings.update`. Never the secrets, payloads or messages |
+| Tool approvals | Since v0.4: `tool_approval.request`, `tool_approval.decide` (Approved / Denied a tool call), `tool_approval.timeout`, `tool_approval.cancel`. Never the call's arguments |
 | Templates | `agent_template.*`: Created template, Added template version, Asked to publish template, Approved / Rejected template for the catalog, Removed template from the catalog |
 | Model providers, Models, MCP servers | `model_provider.*`, `model.*`, `mcp_server.*` (Added, Changed, Deleted …) |
-| Platform and users (settings) | `platform.personal_settings` (Changed personal workspace defaults), `platform.model_settings` (Changed team provider and MCP server settings), `platform.secrets_rekey` (Re-sealed stored secrets under the current encryption key: the counts per column, never values; see [Rotating keys](/docs/operate/key-rotation)) |
+| Platform and users (settings) | `platform.personal_settings` (Changed personal workspace defaults), `platform.model_settings` (Changed team provider and MCP server settings), `platform.secrets_rekey` (Re-sealed stored secrets under the current encryption key: the counts per column, never values; see [Rotating keys](/docs/operate/key-rotation)), and since v0.4 `platform.mcp_identity_key_create` and `platform.mcp_identity_key_rotate` (the MCP identity signing key) |
 | Connected apps | `oauth.consent` (Connected app), `oauth.token_issue` (Issued app token), `oauth.revoke` (Revoked app access; reason `user`, `admin`, `client` or `refresh_reuse`), `oauth.client_register` (Registered app), `oauth.trusted_clients_update` (Changed trusted apps), `oauth.client_secret_create` (Issued app secret), `oauth.client_secret_delete` (Deleted app secret: the app and the secret's first characters, never the secret) |
-| Conversations | `thread.admin_read` (Read a private conversation, or Read a team conversation): a platform admin read a conversation, with the reason |
+| Conversations | `thread.admin_read` (Read a private conversation, or Read a team conversation): a platform admin read a conversation or one of its documents, with the reason |
 
 Conversations themselves are never in the log.
 
 ## Who acted, and how
 
-Each entry has an actor: a **person**, a **service account**, or the **system**. For a person it says **how**: signed in to the web app, with an API key (named), or through an app they connected (named). An app's actions are the person's, "via" the app.
+Each entry has an actor: a **person**, a **service account**, the **system**, or, since v0.4, an **agent** changing the schedules it set itself (shown as **Agent** and its name). For a person it says **how**: signed in to the web app, with an API key (named), or through an app they connected (named). An app's actions are the person's, "via" the app.
 
 ## Filters and details
 

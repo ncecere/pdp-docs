@@ -1,6 +1,6 @@
 ---
 title: Templates
-description: "Team templates in Pi Durable Platform: instructions, model and MCP servers, versions, asking to publish one to the catalog, review, and archiving."
+description: "Team templates in Pi Durable Platform: instructions, model, MCP servers, kind, tool approvals and schedules, versions, asking to publish one to the catalog, review, and archiving."
 ---
 
 A template is what a Pi Durable Platform agent is deployed from. A team's own templates are on its **Templates** page; the templates every team can deploy are in the **Catalog**.
@@ -15,9 +15,12 @@ A template has a name, a slug and a description, and a list of **versions**. Eac
 - **The model it runs on**: one of the models the team may use, or the platform's default model. A team can still pick another model for one agent.
 - **MCP servers its agents can call**: some servers, each with all its tools or some of them.
 - **Apps can give its agents their own MCP servers for a thread**: whether an app may add its user's MCP servers to a thread (see [Thread MCP servers](/docs/build/thread-mcp-servers)).
+- **Kind** (since v0.4): what its agents do: **Assistant** (the default), **Triage** or **Deep researcher**, with the kind's settings. See [Triage and deep researcher agents](/docs/teams/agent-kinds).
+- **Ask a person before these tools run** (since v0.4): tools that wait for a person's approval, who else may decide, and when an undecided call is denied. See [Tool approvals](/docs/teams/tool-approvals).
+- **Let its agents schedule their own reminders and recurring work** (since v0.4, off by default): gives agents a schedule tool. What they set is listed under the agent's **Triggers**. See [Agent-made schedules](/docs/teams/triggers#agent-made-schedules).
 - **What changed**: notes about the version.
 
-Agents also get the built-in `get_time` tool. Templates don't carry code: an agent is Pi's durable agent with these settings.
+Agents also get the built-in `get_time` tool. Templates don't carry code: an agent runs the runtime the operator deployed (the platform's own, or a [custom agent](/docs/build/custom-agents)) with these settings.
 
 ## Create a template
 

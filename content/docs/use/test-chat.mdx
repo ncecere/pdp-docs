@@ -24,7 +24,11 @@ The first time you open the tab it opens the most recently used chat.
 
 - **Your messages** show who sent them. On a shared thread that may be another member, or an app acting for someone.
 - **The agent's replies** stream in as they are written, with any reasoning and tool calls. Under each finished reply is a line such as `model-name · 1,234 tokens · 3.2s`: the model, the tokens it used, how long it took and, when it didn't end normally, why (for example **Length limit** or **Stopped**).
-- **Tool calls** show their input, their output and how long they ran.
+- **Tool calls** show their input, their output and how long they ran, and, when the tool returned some for apps, its **Details** (raw JSON).
+- **A tool call waiting for approval** says who it was asked for and when it expires. If it's yours to decide, **Approve** or **Deny** it there, with an optional reason the agent is given when you deny. See [Tool approvals](/docs/teams/tool-approvals).
+- **Messages a trigger sent** show the trigger as their author ([Triggers and runs](/docs/teams/triggers)).
+
+An agent that keeps documents for apps, such as the [triage queue or the research plan](/docs/teams/agent-kinds), shows the conversation's documents beside the chat, and refreshes them as they change.
 
 Older messages, from before the platform recorded these details, show what they have.
 

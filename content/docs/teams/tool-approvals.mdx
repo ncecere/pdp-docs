@@ -1,0 +1,80 @@
+---
+title: Tool approvals
+description: "Make Pi Durable Platform agents ask a person before listed tools run: the template version's approvals, who may decide, approving and denying in the console and the API, time-outs, unattended runs, hibernation while waiting, and the audit trail."
+---
+
+A template version can give an agent a tool or not. Since v0.4 there is a third answer: **ask first**. A version lists tools that need a person's approval. When the agent calls one, the call waits, nothing of the tool runs, and the people allowed see the request with its arguments. Approved, the call runs; denied, it's refused and the agent is told why. Nothing is approved for later: each call is asked on its own.
+
+The wait is durable: it survives the agent hibernating, a restart and a platform upgrade. A decision made while the agent sleeps wakes it, and the call goes on.
+
+## Mark tools in a template version
+
+In the template's **Versions** tab, **New version** (or a new template) has:
+
+| Field | |
+|---|---|
+| **Ask a person before these tools run** | Tool names, or patterns where `*` stands for any characters: `mcp__tracker__create_issue`, or `mcp__mail__*` for every tool of the `mail` MCP server. Built-in tools (`get_time`), the template's MCP tools (`mcp__<slug>__<tool>`) and apps' thread tools (`mcpc__<slug>__<tool>`) can all be listed. At most 100 |
+| **Who else may decide in shared conversations (besides the person who asked)** | **Owners and admins** (the default), **Editors and above** or **Every member** |
+| **Deny when nobody decides within** | 1 minute to 30 days; 24 hours by default |
+
+They are part of the version, like its instructions: agents get them when they're deployed on the version or upgraded to it, and a rollback goes back to the old list. In the API they are the version's `approvals`: `{"tools": [...], "role": "admin" | "editor" | "member", "timeoutSeconds": 86400}`.
+
+A [triage](/docs/teams/agent-kinds#triage) version also asks before each of its write tools, unless its settings turn that off. A [custom agent](/docs/build/custom-agents#asking-a-person-first) can ask from its own code. A call that both ask for is asked once.
+
+## Who may decide
+
+Whoever can see an approval can see its conversation: the people and service accounts who may use the agent and read the thread. Of them:
+
+| Conversation | May decide |
+|---|---|
+| **Private** | Its creator only |
+| **Shared**, started by a person's or service account's message | The one whose message started the run; the team's owners and admins; and members at or above the version's role |
+| **Unattended** (a [trigger](/docs/teams/triggers)'s run) | The team's owners and admins |
+
+"The one whose message started the run" is the author of the message the reply answers; a steering message doesn't change it. For a service-managed agent, whose conversations the team's people never see, its team's editor service accounts act as admins.
+
+**Platform staff can't decide**: platform admins and auditors don't use other teams' agents, and a reasoned read doesn't extend to approvals.
+
+## Decide in the console
+
+- **In the conversation** (the agent's **Test** tab). The waiting tool call says who it was asked for (or that it's an unattended run) and when it expires, and, for someone who may decide, has **Approve** and **Deny** with an optional reason. The reason is given to the agent on denial. Once decided, the call shows who decided and how.
+- **The agent's Approvals tab** lists the calls **Waiting for approval** in the conversations you can read, with **Approve** and **Deny** where they're yours to decide (**Not yours to decide** otherwise, **Unattended** for a trigger's run), and **Recent decisions**.
+
+A denied call becomes the call's error, for example `Tool call blocked: denied by Ann: not today`, and the agent carries on with that in mind.
+
+## Decide through the API
+
+| Route | |
+|---|---|
+| `GET /v1/me/approvals` | Your inbox: pending approvals you may decide, across agents |
+| `GET /v1/agents/{agentId}/approvals?thread=&status=pending\|decided\|all&limit=` | An agent's approvals you may see, newest first (pending by default) |
+| `GET /v1/agents/{agentId}/approvals/{approvalId}` | One approval |
+| `POST /v1/agents/{agentId}/approvals/{approvalId}` | `{"decision": "approve" \| "deny", "reason": "…"}` (reason up to 1,000 characters) |
+
+```sh
+curl -X POST https://agents.example.com/v1/agents/$AGENT/approvals/$APPROVAL \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"decision": "deny", "reason": "Not on a Friday afternoon"}'
+```
+
+An approval is `{id, agentId, agentName, threadId, tool, callId, arguments, summary?, requestedFor?, status, requestedAt, expiresAt, decidedAt?, decidedBy?, reason?, canDecide}`. Its status is `pending`, `approved`, `denied`, `timed_out` or `cancelled`. Someone who may see it but not decide gets `canDecide: false`, and `403 approval_forbidden` if they try; deciding one that is no longer pending is `409 approval_decided`.
+
+`arguments` is a redacted view: values under keys that look like credentials (`authorization`, `token`, `secret`, `password`, `api_key`, `headers`, …) read `[redacted]`, strings are cut at 2,000 characters, and the whole view at 16 KiB.
+
+In a conversation's view each tool call carries its `approval` once one was asked, and `approvals` lists the thread's pending ones. The delta stream sends `approvals.set` with the whole pending list (`[]` clears it). See [Event streams](/docs/build/events#event-types). Approvals aren't announced on the stream of every thread: poll the inbox.
+
+## Time-outs and cancellation
+
+- A request nobody decides within the version's time-out is **timed out**, and the call is denied.
+- Stopping the reply, or deleting the thread, **cancels** a waiting request.
+- A decision for an agent that was turned off waits until it is turned on; the request may time out meanwhile.
+
+## While it waits
+
+An agent whose only work is waiting for a person isn't busy: it may [hibernate](/docs/get-started/concepts#hibernating-runtimes) while the person thinks, and the decision wakes it. A triggered run waiting for an approval shows as `running` and isn't stopped for its run time: the approval's own time-out bounds the wait.
+
+## Audit
+
+Requests, decisions, time-outs and cancellations are recorded in the team's audit log (**Agent asked to approve a tool call**, **Approved a tool call**, **Denied a tool call**, **Tool call not approved in time**, **Tool call approval cancelled**), with the tool, the thread, the decision and its reason. Entries never hold the arguments.
+
+The design note, [approvals.md](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/approvals.md), describes how the wait survives a restart.

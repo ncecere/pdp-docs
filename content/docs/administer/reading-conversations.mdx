@@ -63,6 +63,12 @@ GET /v1/admin/agents/{agentId}/threads
 # One conversation, with a reason (platform admins, browser session)
 POST /v1/admin/agents/{agentId}/threads/{threadId}/read
 {"reason": "Investigating a report of abuse from the helpdesk team"}
+
+# One document an agent exposes in a conversation, with a reason (since v0.4)
+POST /v1/admin/agents/{agentId}/threads/{threadId}/documents/{kind}/read
+{"reason": "…"}
 ```
+
+Reading a document is recorded the same way, as `thread.admin_read` with the document's kind. See [Agent state for apps](/docs/build/agent-state). Platform roles never decide tool approvals, and agent-made schedules' messages are withheld from platform staff.
 
 See [adminListAgentThreads](/docs/api/reference/admin/adminListAgentThreads) and [adminReadAgentThread](/docs/api/reference/admin/adminReadAgentThread).

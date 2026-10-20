@@ -73,7 +73,7 @@ See [OIDC sign-in](/docs/operate/oidc).
 
 | Variable | Default | |
 |---|---|---|
-| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, and the identity provider refresh tokens kept for group re-checks. |
+| `ENCRYPTION_KEY` | none, required (secret) | 32 bytes, base64 (`openssl rand -base64 32`). Encrypts stored secrets: provider keys and headers, MCP server headers, apps' thread MCP headers, each agent's database password and runtime token, the identity provider refresh tokens kept for group re-checks, triggers' webhook and callback secrets, and the MCP identity signing keys. |
 | `ENCRYPTION_KEY_PREVIOUS` | none (secret) | The key being rotated away from; still accepted for reads until `pi-durable-platform rekey` has re-sealed every value |
 | `API_KEY_PEPPER` | none, required (secret) | 32 bytes, base64. The HMAC key under which API keys, service account keys and OAuth tokens are stored as digests. |
 | `API_KEY_PEPPER_PREVIOUS` | none (secret) | The pepper being rotated away from. Keys made with it keep working and are re-digested on use. Remove it after 2 to 4 weeks. |
@@ -97,6 +97,7 @@ See [Rotating keys](/docs/operate/key-rotation).
 | `AGENTS_SANDBOX_ACTIVATION_SECRET` | none | The Secret holding the pool's `RUNTIME_ACTIVATION_TOKEN`; created if missing |
 | `AGENTS_SANDBOX_ACTIVATION_TOKEN` | none (secret) | The pool's token given directly (at least 32 characters); not with the Secret |
 | `AGENTS_IDLE_TIMEOUT` | `10m` | Idle agents hibernate after this long (10s to 7 days) |
+| `AGENTS_BACKGROUND_MAX` | `2h` | The longest background work (background tasks and subagents, tool calls still running after their reply) keeps an agent awake (1m to 168h). Older work is aborted, audited, and the agent may hibernate. The Helm chart's `agents.backgroundMax` |
 | `AGENTS_GATEWAY_ADDR` | `127.0.0.1:8099` | Where the platform listens for agents (model and MCP proxy). Use `:8099` on Kubernetes. |
 | `AGENTS_GATEWAY_URL` | `http://127.0.0.1:8099` | How agents reach that listener: an http(s) origin |
 | `AGENTS_CLIENT_MCP_HOSTS` | none | Hosts apps may give agents MCP servers on, comma-separated `[scheme://]host[:port]`, `*.` for subdomains, `https` by default. Empty: none. |
@@ -108,6 +109,19 @@ See [Rotating keys](/docs/operate/key-rotation).
 | `AGENTS_MODEL_REASONING` | `false` | Whether the default model reasons |
 
 The default model is for templates and agents that don't choose one from the model catalog. Its key is given to the agents that use it.
+
+## Triggers
+
+The ceilings of every agent's [trigger limits](/docs/teams/triggers#limits). Each team sets its agents' limits within them.
+
+| Variable | Default | |
+|---|---|---|
+| `TRIGGERS_INTERVAL` | `10s` | How often each replica's trigger loop runs (1s to 5m); one replica at a time does the work |
+| `TRIGGERS_MAX_RUN_TIME` | `30m` | The longest a triggered run may take, and an agent's default (1m to 24h) |
+| `TRIGGERS_MAX_CONCURRENT_RUNS` | `5` | The most triggered runs an agent may have at once (1 to 100); an agent's default is 1 |
+| `TRIGGERS_PAUSE_AFTER_FAILURES` | `5` | Failed runs in a row after which a trigger pauses itself (1 to 100) |
+| `TRIGGERS_AGENT_MAX` | `20` | How many schedules an agent may set itself (1 to 50, within the 50 triggers an agent may have) |
+| `TRIGGERS_AGENT_MIN_INTERVAL` | `5m` | The shortest time between two fires of a recurring schedule an agent set itself (1m to 168h) |
 
 ## Observability
 

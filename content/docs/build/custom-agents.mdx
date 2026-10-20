@@ -1,0 +1,236 @@
+---
+title: Building a custom agent
+description: "Build a Pi Durable Platform agent with its own tools, documents and guards using the runtime library @pdp/runtime: defineAgent, the starter project, the test kit, running it against the console, its image, and the upgrade check."
+---
+
+Every Pi Durable Platform agent runs the platform's agent runtime. Since v0.4 that runtime is also a library, `@pdp/runtime`, and the platform's own assistant is just its default composition. With the library you can build an agent with **its own tools, state and guards**, on the same storage, hibernation, reports and access rules as every other agent.
+
+<Callout title="Who runs custom agents today">
+The runtime image is the operator's choice (`AGENTS_IMAGE`, or `AGENTS_RUNTIME_DIR` for the local launcher), and every agent of an install runs it. Teams can't upload code. Letting a template version pick a runtime that platform admins registered is planned (roadmap item [#29](https://github.com/ncecere/pi-durable-platform/issues/29)). The library lives in the product repository's `runtime/` and isn't published to a registry yet: the starter project links it.
+</Callout>
+
+## What runs where
+
+A custom agent is a runtime process built with the library. Whatever it adds runs **inside the agent's runtime**, with what the runtime has:
+
+- the agent's **database role**: its whole schema (every thread's transcript and documents), never another agent's;
+- the agent's **gateway credential**: the model proxy on the team's providers and budget, the MCP proxy for the template's servers, and the platform's reports;
+- in direct mode, the provider key and the direct MCP servers' URLs and headers;
+- the agents' **network boundary**: the agents database, the platform's gateway and DNS, and nothing else unless the operator allows it.
+
+So **an outside integration is an MCP server, not code**. Register it with the platform (as a [team MCP server](/docs/teams/mcp-servers)): the platform keeps its headers sealed, filters its tools per template, logs every call and, in proxy mode, tells it who the call is for ([MCP identity tokens](/docs/build/mcp-identity)). Code in the agent adds **logic, state and guards** on top: a tool that computes, a document that remembers, a hook that blocks or asks before an MCP tool writes. The platform treats what a runtime reports as untrusted input, and the library's checks catch mistakes; they are not a security boundary.
+
+## An agent in one file
+
+```ts
+import {
+  assistantExtension, defineAgent, defineDoc, defineExtension, defineTool, hook, runAgentProcess, ToolTask, Type,
+} from "@pdp/runtime";
+
+// State next to the transcript: one per conversation.
+const Board = defineDoc<{ tasks: { id: string; text: string; done: boolean }[] }>({
+  kind: "example.board", version: 1, scope: "conversation", history: "latest", fork: "current",
+  initial: () => ({ tasks: [] }),
+});
+
+const board = defineTool({
+  name: "board",
+  description: "Add a task to this conversation's board",
+  parameters: Type.Object({ text: Type.String() }),
+  replay: "safe", // keyed by the call: a rerun after a crash finds its own write
+  execute: async ({ text }, api, context) => {
+    let open = 0;
+    await api.commit(async (tx) => {
+      const doc = await tx.doc(Board, api.conversationId);
+      if (!doc.tasks.some((t) => t.id === api.callId)) doc.tasks.push({ id: api.callId, text, done: false });
+      open = doc.tasks.filter((t) => !t.done).length;
+    }, context);
+    return { output: [{ type: "text", text: "Added." }], details: { open } }; // details: for apps, never the model
+  },
+});
+
+// A guard: no MCP tool that deletes runs without a person.
+const guard = hook(ToolTask, {
+  beforeTool: (call) =>
+    call.name.startsWith("mcp") && /delete/i.test(call.name) ? { block: "Deleting needs a person" } : undefined,
+});
+
+await runAgentProcess(
+  defineAgent({
+    name: "task-board",
+    documents: [Board],
+    expose: [Board], // apps may read it through the platform
+    extensions: ({ instructions }) => [
+      assistantExtension(instructions), // the template's instructions and get_time
+      defineExtension({ name: "task-board", tools: [board], hooks: [guard] }),
+    ],
+  }),
+);
+```
+
+`runAgentProcess` is the whole entry point: it reads the [runtime contract](#the-runtime-contract)'s environment, starts the agent (or waits in standby for a warm pool), and serves the HTTP API the platform calls.
+
+## The library
+
+| Export | What it is |
+|---|---|
+| `defineAgent(definition)` | An agent: `name`, `extensions` (an array, or a function of the agent's context: `agentId`, `name`, the template's `instructions`, `env`, `approvals`), `documents`, `expose`, `conversationCreated`, `settings`, `waitsForPerson`, `schedules` |
+| `runAgentProcess(definition)` | Runs it as an agent process. It also takes a function of the agent's variables that returns a definition, which is how the platform's runtime picks a [kind](/docs/teams/agent-kinds) |
+| `assistantExtension(instructions)`, `assistantAgent` | The platform's own agent: the template's instructions and `get_time` |
+| `defineTool`, `defineExtension`, `section`, `hook`, `wrapTool`, `wrapSection`, `defineDoc`, `defineEntry`, `defineTask`, `configure`, `ToolTask`, `GenerationTask`, `CompactionTask`, `Type` | The facade over Pi's durable package, and the types an author needs |
+| `approvalHook(approvals, decide)`, `approvals.request(…)` | Ask a person before a tool call runs ([below](#asking-a-person-first)) |
+| `defineSubagent(options)` | A subagent as a replay-safe tool, in the foreground or the background |
+| `runAuthor(api, context)` | Who sent the message that started the run a tool call belongs to: a person, a service account or a trigger |
+| `@pdp/runtime/kinds` | The first-party [triage and deep researcher](/docs/teams/agent-kinds) and their parts, to build a variant from |
+| `@pdp/runtime/testing` | The [test kit](#test-it) |
+| `CONTRACT_VERSION`, `PI_DURABLE_VERSION` | What the runtime reports to the platform |
+
+Import the library, not Pi's durable package: what the facade leaves out isn't covered by its promise. Within a contract version these exports only grow; a removal or an incompatible change comes with a new contract version and a note in the release notes. The rest of the main entry (storage, the server, the MCP client) is the runtime's own parts.
+
+## What the library guarantees
+
+- **It owns the extension selection.** Every thread selects your extensions, in order, then the template's and the thread's MCP servers, when it starts and again before every message. A guard in your definition runs on every turn of every thread, also in threads that began before the guard existed.
+- **Subagents keep the guards**: a subagent's tools are computed from its caller's selection.
+- **Declared documents exist** in every conversation (threads, subagents' conversations, forks) before `conversationCreated` runs.
+- **Reserved names are refused** when the agent is defined: extensions `mcp`, `tool-search`, `mcp-thread:*` and names starting with `pdp` or `pi.`; tools starting with `mcp__` or `mcpc__`; document kinds and task names starting with `pi.` or `pdp.`.
+- **The contract** is kept: storage in the agent's schema with one owner at a time, exit on lost storage, status, standby and activation, thread and usage reports.
+
+## What not to do
+
+- **Never rename a document kind** or reuse it for another shape: kinds are stored. Change a shape by raising `version` with a `migrate`. Extension, tool and task names are stored too: keep them stable.
+- **Don't select extensions yourself** (`configure({ extensions })`): a guard left out would run nowhere. Leave `model` and `extensions` to the library.
+- **Only an idempotent tool is `replay: "safe"`.** After a crash a replay-safe tool runs again; any other ends `interrupted`. Key a replay-safe tool's effect by `api.callId` and record it, or pass the same request ID to the outside system.
+- **Never await the outside world inside a commit** (a model, the network, a person).
+- **Honour the abort signal** (`context.abortSignal`): hibernation waits for running code to return.
+- **Background work keeps the agent awake only up to a ceiling** (`AGENTS_BACKGROUND_MAX`, 2 hours by default); past it the platform aborts it. Split long jobs, and declare tasks that wait for a person in `waitsForPerson` so they don't hold the agent awake.
+- **Never log secrets** from the agent's `env` (the model key, the gateway credential, MCP headers).
+
+## State for apps
+
+A tool's `details` and the documents you list in `expose` reach the apps that use the agent, through the platform and with the access reading the thread needs. See [Agent state for apps](/docs/build/agent-state).
+
+## Asking a person first
+
+The agent's context has `approvals`. `approvalHook` asks a person before a call runs, and blocks it when they deny; the wait survives restarts and hibernation. For example, refunds over 100 EUR:
+
+```ts
+defineAgent({
+  name: "refunds",
+  extensions: ({ instructions, approvals }) => [
+    assistantExtension(instructions),
+    defineExtension({
+      name: "refunds",
+      tools: [refund],
+      hooks: [
+        approvalHook(approvals, (call) =>
+          call.name === "refund" && (call.arguments.amount as number) > 100 ? { summary: "Refund over 100 EUR" } : undefined,
+        ),
+      ],
+    }),
+  ],
+});
+```
+
+A template version can also mark tools for approval without code. A tool both your hook and the template mark is asked once. See [Tool approvals](/docs/teams/tool-approvals).
+
+## Schedules
+
+When the template version lets its agents schedule, the library adds the `schedule`, `list_schedules` and `cancel_schedule` tools to every thread after your extensions. `schedules: false` in the definition leaves them out. See [Agent-made schedules](/docs/teams/triggers#agent-made-schedules).
+
+## Test it
+
+`@pdp/runtime/testing` runs your agent on in-memory storage with a scripted model, behind its real HTTP API. No database or model key is needed. It works with Vitest or Jest.
+
+- `fakeModel()` scripts the model: `reply(...)` queues answers; `toolCall(...)` and `answer(...)` build them.
+- `startTestAgent(definition, { model })` starts the agent; `send`, `view`, `settled`, `status` and `document` talk to it as the platform would.
+- `gate()` and `afterGate(...)` stop a tool, a model request or a subagent where the test wants; `restart()` crashes the process there and starts it again on the same storage.
+- `expectReplayed(agent, threadId)` checks that after any number of restarts every tool call has exactly one result and every subagent was given its task once.
+- `agent.approvals()`, `agent.pendingApproval()` and `agent.decide(id, "approve" | "deny")` decide approvals as the platform would.
+- `registerRuntimeConformance` and `registerStandbyConformance` run the runtime contract as HTTP tests; `registerStorageConformance` runs the durable package's storage suite.
+
+```ts
+const inTool = gate(); // the test's board tool awaits inTool.wait(context) first
+const model = fakeModel();
+model.reply(toolCall("board", { text: "Buy milk" }, { id: "c1" }), "Added.");
+const first = await startTestAgent(definition, { model });
+await first.send("t1", "add milk");
+await inTool.reached;                 // the tool is running
+const second = await first.restart(); // crash, then start again on the same storage
+inTool.open();
+await second.settled("t1");
+await expectReplayed(second, "t1");   // one result for c1, nothing lost or repeated
+```
+
+## The starter project
+
+The product repository's [`examples/custom-agent/`](https://github.com/ncecere/pi-durable-platform/tree/v0.4.0/examples/custom-agent) is a task board on the assistant: one replay-safe tool with `details`, one exposed document (`example.board`), one guard, tests with the test kit (a conversation, restarts in the middle of a tool call and of the model's answer, the conformance suite) and a Dockerfile. The product's CI builds and tests it.
+
+<Steps>
+<Step>
+
+**Set up and test.** The library is the repository's `runtime/`, linked:
+
+```sh
+cd runtime && pnpm install && cd ..
+cd examples/custom-agent && pnpm install
+pnpm typecheck
+pnpm test
+```
+
+</Step>
+<Step>
+
+**Run it against the console.** Start the compose PostgreSQL (`make deps-up`), set `AGENTS_RUNTIME_DIR=examples/custom-agent` in `.env` (every agent of this local instance now runs the task board), and `make run`. Deploy an agent in a team and chat with it in its **Test** tab; open a tool call to see its details. After a change to `src/`, hibernate the agent: its next message starts the new code.
+
+</Step>
+<Step>
+
+**Read the board as an app would**, with a service account key of the team:
+
+```sh
+curl http://127.0.0.1:8098/v1/agents/$AGENT/threads/$THREAD/documents/example.board \
+  -H "Authorization: Bearer $KEY"
+```
+
+</Step>
+<Step>
+
+**Build the image** on the runtime image of the platform release you tested with, pinned by digest for anything that runs, and give it to the platform as `AGENTS_IMAGE`:
+
+```sh
+docker build --build-arg RUNTIME_IMAGE=ghcr.io/ncecere/pi-durable-platform-runtime@sha256:… \
+  -t registry.example.com/task-board:1 examples/custom-agent
+```
+
+</Step>
+</Steps>
+
+The local launcher's default model is a scripted demo that only calls `get_time`. To see the model use your tools, add a model in **Admin › Models** and choose it in the agent's settings.
+
+For larger examples, the [triage and deep researcher](/docs/teams/agent-kinds) kinds are built with the library's public exports only.
+
+## Upgrades
+
+Pi's durable package migrates a document when it reads it, and code that finds a document a newer version wrote refuses it. So once a runtime with a newer durable package has written an agent's storage, an older runtime can't run that agent. The platform checks:
+
+- A runtime reports its contract and durable package versions when it starts, before it opens the agent's storage. The platform records, per agent, the newest version that has written its storage, and refuses an older runtime: requests that wake the agent answer `409 runtime_too_old`, and the agent's **Overview** says **The agent can't start on its runtime** with the reason. The first refusal of a version is audited.
+- A version is recorded only when it has the platform's own durable package major version and is at most one minor version ahead (with 1.3.0 shipped: up to 1.4.x), so a runtime can't make the platform refuse every genuine one by reporting a made-up version.
+- An operator removes a wrong record with `pi-durable-platform reset-storage-version --agent <id>` (or sets one with `--to <version>`), audited. See [Doctor and health](/docs/operate/doctor-and-health#common-problems).
+
+**Rolling a runtime back after it has written an agent's data is not supported.** Fix forward. Before upgrading the durable package in your image, test the agent on a copy of its data.
+
+## The runtime contract
+
+What a process must do for the platform to run it as an agent (its environment, exit codes, HTTP routes, `/status`, standby and activation, and the reports it sends) is written down as **contract version 2**, and `@pdp/runtime/testing` has it as a conformance suite anyone can run against a runtime:
+
+```ts
+import { registerRuntimeConformance } from "@pdp/runtime/testing";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+registerRuntimeConformance({ describe, it, expect, beforeAll, afterAll }, "the task board", async () => {
+  const agent = await startTestAgent(taskBoardAgent);
+  return { baseUrl: agent.baseUrl, token: agent.token, close: () => agent.close() };
+});
+```
+
+The design notes have the details: [custom agents](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/custom-agents.md) (trust model, the API, guarantees and what to avoid, upgrades, the test kit) and [the runtime contract](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/runtime-contract.md).

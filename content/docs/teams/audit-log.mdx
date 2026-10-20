@@ -16,17 +16,20 @@ Open **Team settings › Audit log**. Owners, admins and editors can read it; me
 - **Templates**: created, new versions, requests to publish, approved, rejected, taken out of the catalog.
 - **Service accounts and keys**: created, changed, deleted, keys created and revoked.
 - **The team's own model providers, models and MCP servers**: added, changed, deleted, including changes platform admins make.
-- **Platform admins reading a conversation**: each read, with the reason they gave (`thread.admin_read`).
+- **Platform admins reading a conversation** or one of its documents: each read, with the reason they gave (`thread.admin_read`).
+- **Triggers and runs** (since v0.4): triggers added, changed, deleted, run now and their secrets replaced; every run a trigger started; runs stopped at a limit; triggers paused after failed runs; changes to an agent's trigger limits. Schedules an agent set itself name the agent as the actor, such as **Agent Planner**.
+- **Tool approvals** (since v0.4): requests, decisions, time-outs and cancellations, with the tool, the thread and the reason, never the arguments.
+- **Agents' runtimes** (since v0.4): the runtime version recorded for an agent, an older runtime refused, a recorded version reset by an operator, and background work stopped past the platform's time limit.
 
-Conversations themselves aren't in the log.
+Conversations, trigger messages, payloads and secrets aren't in the log.
 
 ## Reading an entry
 
-Each entry has a label, such as **Deployed agent** or **Added template version** (since v0.1.1 every action has one), and says **who** acted and **how**: a person in the browser, a person with an API key (and its name), a person through a connected app (and the app's name), a service account (and the key's name), or the system. It names the target (with its current name, or its last known name if it was deleted), and **View details** shows the fields before and after the change, and the request ID.
+Each entry has a label, such as **Deployed agent** or **Added template version** (since v0.1.1 every action has one), and says **who** acted and **how**: a person in the browser, a person with an API key (and its name), a person through a connected app (and the app's name), a service account (and the key's name), the system, or an agent changing its own schedules. It names the target (with its current name, or its last known name if it was deleted), and **View details** shows the fields before and after the change, and the request ID.
 
 ## Filters
 
-- **Area**: an area (Agents, Templates, Team and members, Service accounts, Model providers, Models, MCP servers, Conversations) or, by typing, one exact action.
+- **Area**: an area (Agents, Templates, Team and members, Service accounts, Model providers, Models, MCP servers, Conversations, Triggers and runs, Trigger limits, Tool approvals) or, by typing, one exact action.
 - **Person**: one person's entries, including their API keys and connected apps.
 - **Date** range.
 

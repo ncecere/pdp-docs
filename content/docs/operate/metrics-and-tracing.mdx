@@ -86,6 +86,8 @@ Every name starts with `pdp_`. Histograms add `_bucket`, `_sum` and `_count`. Th
 | `agents_running` | none | Agents with a runtime, as the idle reaper last saw them (every 30 s) |
 | `agents` | `enabled` | Agents that exist (counted every 30 s) |
 | `agent_hibernations_total` | `reason` (`idle` or `request`), `result` | `idle` is the reaper. `request` is an explicit hibernate, or a change that restarts the agent |
+| `agents_awake` | `reason` (`reply`, `stream`, `background`, `recent`) | Since v0.4: running agents the reaper last found kept awake by each reason (an agent can count for several): a reply, an open event stream, background work younger than `AGENTS_BACKGROUND_MAX`, use within the idle timeout |
+| `agent_background_aborts_total` | `result` | Since v0.4: background work past `AGENTS_BACKGROUND_MAX` that the reaper had a runtime abort before hibernating the agent |
 | `model_proxy_requests_total`, `model_proxy_request_duration_seconds` | `provider_kind`, `model`, `code` | The model proxy. The duration is the whole reply, streams included |
 | `model_proxy_tokens_total` | `provider_kind`, `model`, `direction` (`input`, `output`, `cache_read`, `cache_write`) | The tokens that replies report |
 | `mcp_proxy_requests_total`, `mcp_proxy_request_duration_seconds` | `server`, `code` | The MCP proxy |
@@ -98,7 +100,7 @@ Every name starts with `pdp_`. Histograms add `_bucket`, `_sum` and `_count`. Th
 | `group_recheck_people` | `state` (`with_token`, `without_token`) | Recently active people the group re-check applies to, by whether a refresh token is kept for them. Every replica reports the same value: use `max` |
 | `rate_limit_rejections_total` | `limiter` | Requests refused with `429`, by limiter |
 | `thread_event_subscribers` | none | Open thread event streams on this replica |
-| `background_runs_total`, `background_run_duration_seconds`, `background_last_success_timestamp_seconds` | `loop`, `result` | The background loops: `reaper`, `cleanup`, `rate_cleanup`, `group_recheck`, `thread_events` (only listeners that failed) and `agent_count` |
+| `background_runs_total`, `background_run_duration_seconds`, `background_last_success_timestamp_seconds` | `loop`, `result` | The background loops: `reaper`, `cleanup`, `rate_cleanup`, `group_recheck`, `thread_events` (only listeners that failed), `agent_count`, and since v0.4 `triggers` (firing schedules, delivering and supervising runs, callbacks) and `approvals` (time-outs and delivering decisions) |
 | `db_pool_*` | `pool` (`platform` or `agents`) | Connection pool statistics, read at each scrape: `acquired_connections`, `idle_connections`, `total_connections`, `max_connections`, and the counters `acquires_total`, `acquires_waited_total`, `acquire_wait_seconds_total` and `canceled_acquires_total` |
 | `build_info` | `version`, `commit`, `go_version` | Always 1 |
 

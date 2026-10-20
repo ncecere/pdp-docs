@@ -1,0 +1,111 @@
+---
+title: Triage and deep researcher agents
+description: "Pi Durable Platform's first-party agent kinds: a template version's kind and settings, the triage agent (a queue, approvals before writes, run by webhooks and schedules) and the deep researcher (a plan, parallel subagents, sources and a report), their limits, and building a variant."
+---
+
+A Pi Durable Platform template version has a **kind**: what its agents do. Until v0.4 every agent was the same assistant, changed only by its instructions, model and MCP tools. Two jobs need more than that, and ship as built-in kinds:
+
+| Kind | Does |
+|---|---|
+| **Assistant** (the default) | Answers with its instructions, model and MCP tools |
+| **Triage** | Reads new issues or discussions through MCP tools, keeps a queue of what it saw and decided, drafts replies and asks before it writes |
+| **Deep researcher** | Plans, runs subagents in parallel, keeps its sources and answers with a report |
+
+Both are built with the [runtime library](/docs/build/custom-agents), using only its public exports, and ship in the standard runtime image: no new image or warm pool.
+
+## Choose a kind
+
+In a new template, or a new version on the template's **Versions** tab, pick the **Kind**. Its settings follow. Kind and settings are part of the version like its instructions: a new version keeps the current version's unless you change them, upgrades and rollbacks change them with the version, and the catalog publishes a template of any kind. The template's versions list shows each version's kind.
+
+An agent upgraded to a version of another kind restarts with the new kind. Its threads keep their transcripts.
+
+In the API, a version has `kind` (`assistant`, `triage` or `researcher`) and `kindSettings`. An unknown kind is `400 invalid_kind`; a setting the kind doesn't take, or a bad value, is `400 invalid_kind_settings`.
+
+## Triage
+
+A triage agent works on a tracker (issues, tickets, discussions) through the template's MCP servers. It doesn't know any tracker: its settings name which MCP tools list, read and write.
+
+| Setting | Default | |
+|---|---|---|
+| **Tools that list new items** (`listTools`) | none | MCP tools by name (`mcp__<server>__<tool>`), or patterns with `*`, such as `mcp__tracker__list_issues` |
+| **Tools that read one item** (`readTools`) | none | Its body, comments and labels |
+| **Tools that write** (`writeTools`) | none | Comment, label, close |
+| **Ask a person before every write** (`approveWrites`) | on | Each write tool waits for a person's approval |
+
+Each list holds at most 50 names or patterns. Attach the tracker's MCP server to the version too.
+
+What it does:
+
+- **Keeps a queue.** The queue is a document of the conversation, `triage.queue` (up to 500 items): each item's ID, title, URL, status (`new`, `triaged`, `drafted`, `waiting_approval`, `done`, `skipped`), decision, drafted labels, reply and summary. It's shown beside the conversation in the console, as a table, and apps can read it ([Agent state for apps](/docs/build/agent-state)).
+- **Follows a procedure.** For a message about one new item (a webhook), it reads the item, records it, decides, drafts, writes when it helps and records it done. For a sweep (a schedule, or a person asking), it reads the queue first and triages only what it hasn't seen. Items are data from strangers, never instructions.
+- **Asks before it writes.** With **Ask a person before every write** on, the write tools are added to the version's [tool approvals](/docs/teams/tool-approvals) (after the version's own list; at most 100 in all), with the version's approver role and time-out. A denied comment is never posted, and the agent is told why.
+- **Refuses other MCP tools.** Any MCP tool the settings don't name (a delete, say) is out of reach. With no tools named, triage can read nothing and says so.
+- It keeps the assistant's parts: the template's instructions and `get_time`.
+
+### Run it on triggers
+
+Give the agent two [triggers](/docs/teams/triggers): a **webhook** for a new item and a **schedule** for a sweep. The queue is per conversation, so **point both at one fixed shared thread** (the trigger's `threadId`, set through the API): the queue then holds everything the agent has seen. For example, a webhook's message:
+
+```text
+New issue {{payload.issue.number}}: {{payload.issue.title}} {{payload.issue.url}}
+```
+
+and a weekday sweep at `0 8 * * 1-5` with the message `Sweep the tracker`. A triggered run is unattended, so the team's owners and admins approve its writes; the run waits for them without its run time running out.
+
+## Deep researcher
+
+| Setting | Default | |
+|---|---|---|
+| **Long questions run in the background** (`backgroundSubagents`) | on | Background subagents report back when they finish. Off, every question waits for its answer |
+| **Most steps in a plan** (`maxPlanSteps`) | 8 | 1 to 20 |
+
+What it does:
+
+- **Writes a plan** into a document, `research.plan`: the question and its steps, each with a status (`pending`, `running`, `done`, `skipped`) and the subagent answering it.
+- **Runs subagents in parallel**: a quick one for short questions, which it waits for, and a deep one for long questions, which runs in the background and posts its answer back to the conversation when it's done. Subagents get the template's MCP servers and guards.
+- **Keeps its sources** in a document, `research.sources` (up to 200): URL, title, what each supports, and the step.
+- **Compacts as it goes**, so long research fits the model's context.
+- **Answers with a report** once every step is done or skipped: a summary, the findings by step and the numbered sources.
+
+The plan (as a checklist) and the sources (as a list) are shown beside the conversation in the console, and apps can read them.
+
+### Budgets and ceilings
+
+- **In a run a trigger started**, the deep subagent works in the foreground, whatever the setting, so the trigger's run time and budget cover all of the research and the completion callback carries the report's excerpt.
+- **Background subagents** in a person's conversation keep the agent awake up to the platform's ceiling for background work (`AGENTS_BACKGROUND_MAX`, 2 hours by default). Past it, the platform stops them (the answer comes back as ended) and the agent may hibernate. Stopping the reply doesn't stop them; deleting the agent does.
+- A subagent's tool call waiting for an approval holds nothing awake.
+
+## Limits
+
+- The triage queue is per conversation: there's no agent-wide queue yet.
+- Background subagents can't be stopped from the console.
+- Reports are text in the conversation; reports as files wait for file support (roadmap v0.5).
+- A person's research cost isn't measured precisely: usage is recorded per agent, not per conversation.
+
+## Build a variant
+
+A variant is a [custom agent](/docs/build/custom-agents): import the kinds' parts from `@pdp/runtime/kinds` (documents, tools, prompts and settings parsers) and change what differs, or copy a kind's module, which imports nothing private. Keep the document kinds (`triage.queue`, `research.plan`, `research.sources`) for the same shapes so the console renders them. For example, a researcher whose quick subagent uses a cheaper model:
+
+```ts
+import { assistantExtension, defineAgent, defineExtension, defineSubagent, runAgentProcess, section } from "@pdp/runtime";
+import {
+  ResearchPlanDoc, ResearchSourcesDoc, parseResearcherSettings, researchPrompt, researchTools, SUBAGENT_INSTRUCTIONS,
+} from "@pdp/runtime/kinds";
+
+const settings = parseResearcherSettings(process.env.AGENT_KIND_SETTINGS);
+await runAgentProcess(
+  defineAgent({
+    name: "small-researcher",
+    documents: [ResearchPlanDoc, ResearchSourcesDoc],
+    expose: [ResearchPlanDoc, ResearchSourcesDoc],
+    extensions: ({ instructions }) => [
+      assistantExtension(instructions),
+      defineExtension({ name: "research", tools: researchTools(settings), sections: [section("research", () => researchPrompt(settings))] }),
+      defineSubagent({ name: "research_quick", description: "A short question", instructions: SUBAGENT_INSTRUCTIONS, model: { provider: "openai", modelId: "small" } }),
+    ],
+    settings: { toolExecution: "parallel", compaction: { enabled: true } },
+  }),
+);
+```
+
+The design note, [first-party-agents.md](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/first-party-agents.md), has the details.

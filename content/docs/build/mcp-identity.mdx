@@ -1,0 +1,174 @@
+---
+title: MCP identity tokens
+description: "For MCP server authors: the signed token Pi Durable Platform sends with each proxied MCP request, naming the agent, its team and, when the platform knows, the person the call is for; its claims, verifying it with the JWKS (TypeScript, Python), and which claims to trust."
+---
+
+MCP servers are called with the team's credentials: the headers a platform admin or a team stored for the server. Since v0.4, Pi Durable Platform also tells a server **who a call is for**. In proxy mode, its MCP gateway adds a short-lived **identity token** to every request it forwards: a JWT signed with a key only the platform holds, naming the calling agent, its team, the kind of thread and, when the platform's own records say so, the person. Your server verifies it with the keys the platform publishes, and can then act for that person: read their mail, keep their memory, apply their permissions.
+
+## Where it arrives
+
+The token is in its own header, as the bare JWT:
+
+```text
+MCP-Gateway-Identity: eyJhbGciOiJFUzI1NiIsImtpZCI6Ii4uLiIsInR5cCI6IkpXVCJ9…
+```
+
+`Authorization` keeps carrying the header stored for your server (for example the team's key for it), unchanged. Every request the gateway forwards carries a fresh token: the handshake, lists, calls, notifications, and session `GET` and `DELETE`.
+
+No header means the call didn't come through the platform's gateway with **Send the identity token** on: treat it as anonymous.
+
+## The token
+
+Header: `{"alg": "ES256", "kid": "<key id>", "typ": "JWT"}`. A call from an agent in a personal workspace, in a private thread, to a server that receives email:
+
+```json
+{
+  "iss": "https://agents.example.com",
+  "aud": "https://mail.example.com/mcp",
+  "sub": "0e6a3d4c-5f1b-4f0e-9b8e-2d7c1a9f3b21",
+  "principal_type": "agent",
+  "name": "Mail assistant",
+  "team": {"id": "6f1c…", "slug": "personal-1a2b3c4d5e6f", "kind": "personal"},
+  "thread_visibility": "private",
+  "person": {"iss": "https://login.example.com/", "sub": "8c41d2…", "email": "ada@example.com"},
+  "person_present": true,
+  "tool": "search_mail",
+  "jti": "9Xq3…",
+  "iat": 1792500000,
+  "nbf": 1792499970,
+  "exp": 1792500300
+}
+```
+
+| Claim | Meaning |
+|---|---|
+| `iss` | The platform's `APP_URL` |
+| `aud` | Your server's URL exactly as registered in the platform, or the **Token audience** configured for it |
+| `sub` | The calling agent's ID. The caller is always the agent |
+| `principal_type` | Always `agent` |
+| `name` | The agent's name (teams choose it: informational) |
+| `team` | The agent's team: `id`, `slug`, and `kind` (`team`, or `personal` for a personal workspace) |
+| `thread_visibility` | `private`, `shared`, or `none` when the call belongs to no thread. A thread the platform has no record of is `shared` |
+| `person` | Only when the platform names a person (below): `iss` and `sub` are the person's issuer and subject at the platform's OIDC identity provider; `email` only when **Include the person's email** is on for your server |
+| `person_present` | `true` when the call belongs to that person's conversation; `false` when no person is named, or in a personal workspace when nobody is at the keyboard (no thread, or a thread working on a [triggered run](/docs/teams/triggers)) |
+| `tool` | On a `tools/call`, your server's own name for the tool called |
+| `jti`, `iat`, `nbf`, `exp` | A unique ID; issued at; valid from 30 seconds before; valid for 5 minutes |
+
+### When a person is named
+
+The gateway decides from its own records. The agent's runtime tells it only which thread a tool call belongs to, and the gateway looks that thread up among the calling agent's own threads:
+
+| The call | `person` |
+|---|---|
+| An agent in a **personal workspace** | The workspace's owner. `person_present` is `false` for lists and the handshake (they belong to no thread) and during triggered runs |
+| A **private thread** of a shared team, started by a person | That person, while they are active and still a member of the team |
+| A private thread a service account started, a **shared** thread, an unknown thread, no thread | Nobody |
+
+The person must still be active (not suspended, not removed by the group re-check). An agent's code can't name a person, choose an email, or make the gateway vouch for one its records don't support; another agent's thread ID finds nothing and names nobody. The runtime never holds the signing key or a token.
+
+## Verify it
+
+1. Read `MCP-Gateway-Identity`.
+2. Check that `alg` is `ES256` and the `kid` is in the platform's key set, `<APP_URL>/.well-known/mcp-identity-jwks.json`. Cache the set for up to five minutes, and fetch it again when you meet a `kid` you don't know.
+3. Check `iss` (the platform's `APP_URL`), `aud` (your URL as registered, or your configured audience), and `exp` and `nbf`, allowing 30 seconds of skew.
+4. Require `principal_type == "agent"`.
+
+<Tabs items={['TypeScript', 'Python']}>
+<Tab value="TypeScript">
+
+```ts
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+
+const ISSUER = "https://agents.example.com";
+const AUDIENCE = "https://mail.example.com/mcp";
+// Cached; fetched again for an unknown kid.
+const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/mcp-identity-jwks.json`), { cacheMaxAge: 5 * 60_000 });
+
+type Identity = JWTPayload & {
+  principal_type: "agent";
+  name: string;
+  team: { id: string; slug: string; kind: "team" | "personal" };
+  thread_visibility: "private" | "shared" | "none";
+  person?: { iss: string; sub: string; email?: string };
+  person_present: boolean;
+  tool?: string;
+};
+
+export async function identityOf(req: Request): Promise<Identity | undefined> {
+  const token = req.headers.get("mcp-gateway-identity");
+  if (!token) return undefined; // anonymous
+  const { payload } = await jwtVerify(token, jwks, {
+    issuer: ISSUER,
+    audience: AUDIENCE,
+    algorithms: ["ES256"],
+    clockTolerance: 30,
+  });
+  if (payload.principal_type !== "agent") throw new Error("not an agent's token");
+  return payload as Identity;
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+import jwt  # pip install "pyjwt[crypto]"
+
+ISSUER = "https://agents.example.com"
+AUDIENCE = "https://mail.example.com/mcp"
+# Cached for five minutes; fetched again for an unknown kid.
+jwks = jwt.PyJWKClient(f"{ISSUER}/.well-known/mcp-identity-jwks.json", cache_jwk_set=True, lifespan=300)
+
+def identity_of(headers) -> dict | None:
+    token = headers.get("MCP-Gateway-Identity")
+    if not token:
+        return None  # anonymous
+    key = jwks.get_signing_key_from_jwt(token)
+    claims = jwt.decode(
+        token, key.key, algorithms=["ES256"], issuer=ISSUER, audience=AUDIENCE, leeway=30,
+        options={"require": ["iss", "aud", "sub", "exp", "nbf", "iat"]},
+    )
+    if claims.get("principal_type") != "agent":
+        raise PermissionError("not an agent's token")
+    return claims
+```
+
+</Tab>
+</Tabs>
+
+### Which claims to trust
+
+- **Find the person by `person.iss` and `person.sub`**, never by `email` or `name` alone. They are stable, and they are the same issuer and subject your own sign-in sees if your service uses the same identity provider.
+- **No `person`: refuse tools that act for someone**, with a message the model can pass on, such as "This tool needs a person: use it from a personal workspace or a private thread".
+- **Check `person_present`** before anything that should only happen while the person is talking to the agent, such as sending mail. Scheduled and webhook runs never have a person present.
+- **Use `team.id`** for team-level decisions. `name`, `team.slug` and `tool` are informational.
+- A token is useless at another server (`aud`) and expires in five minutes. Don't forward it.
+
+## Settings for your server
+
+The settings are on the server's **Settings** tab, under **Identity**: in **Admin › MCP servers** for the platform's servers, and in the team's **MCP servers** for a team's own (owners and admins). Changes are audited.
+
+| Setting | API field | Default | |
+|---|---|---|---|
+| **Send the identity token** | `sendIdentity` | On | Turn it off for servers outside your organisation |
+| **Token audience** | `identityAudience` | Empty: the server's URL | What `aud` says, for example one audience for several servers behind one gateway |
+| **Include the person's email** | `identityEmail` | Off | Adds `person.email` |
+
+- **Direct mode gets no token.** In direct mode the runtime calls the server itself, so the platform can't vouch for the call. A server that needs to know the person must be in proxy mode.
+- **Apps' thread MCP servers** get no token: the app chose that server and already knows its user.
+- The platform's own reads of a server's tools (adding it, **Refresh tools**) carry no token.
+- If the platform can't sign (no usable key), it refuses the request with `503 identity_unavailable` rather than send it without the token.
+
+Platform admins and teams can't store a header named `MCP-Gateway-Identity` or `PDP-Thread`.
+
+## Keys and rotation
+
+The platform creates its first P-256 signing key when it starts, sealed with `ENCRYPTION_KEY`. The key set lists the key that signs now, keys that will sign soon (published ahead, 24 hours by default) and keys that stopped signing in the last hour, served with `Cache-Control: public, max-age=300`. A server that caches the set for up to five minutes and fetches it again on an unknown `kid` never misses a rotation. Operators rotate with `pi-durable-platform rotate-mcp-identity-key`: see [Rotating keys](/docs/operate/key-rotation#the-mcp-identity-signing-key).
+
+Your server must be able to reach the platform's `APP_URL` to fetch the key set.
+
+## A known limit
+
+In a shared team, a runtime working on a shared thread could name another of **its own agent's** private threads and get a token naming that thread's creator. The creator chose to talk to that agent, which already acts in their conversation with the same tools. Today runtimes run the operator's code only. In a personal workspace there is nothing to choose: every thread is the owner's.
+
+The design note, [mcp-identity.md](https://github.com/ncecere/pi-durable-platform/blob/v0.4.0/docs/mcp-identity.md), has the threat model and the rules in full.

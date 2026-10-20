@@ -43,6 +43,7 @@ The platform sets each user message's `author` from the credential and ignores a
 
 - `kind` is `user` or `service_account`; `name` is the person's display name (else email) or the service account's name.
 - `via` is the app's name when a person sent it through OAuth Connect.
+- Since v0.4, `kind` can also be `trigger`: a message a [schedule or webhook](/docs/teams/triggers) sent, with the trigger's `id` and `name`. The model is told `[Message from trigger <name>]`. A trigger's thread is shared and started by nobody (`createdBy` is null).
 
 On **shared** threads of a shared team's agent, the model is told who is speaking: its copy of each message starts with a line `[Message from <name>]`. Personal workspaces and private threads don't add it.
 
@@ -62,7 +63,8 @@ Messages in a conversation view carry:
 | `usage` | assistant | `input`, `output`, `cacheRead`, `cacheWrite`, `total` tokens |
 | `stopReason` | assistant | `stop`, `length`, `toolUse`, `error` or `aborted` |
 | `error` | assistant | A reply that failed or was interrupted |
-| `toolCalls` | assistant | `id`, `name`, `arguments`, `startedAt`, `endedAt` (absent while it runs) |
+| `toolCalls` | assistant | `id`, `name`, `arguments`, `startedAt`, `endedAt` (absent while it runs), and `approval` once a person's approval was asked for it ([Tool approvals](/docs/teams/tool-approvals)) |
 | `toolCallId`, `name`, `isError` | tool | The result of a tool call |
+| `details`, `detailsOmitted` | tool | Structured data the tool returned for apps, at most 16 KiB ([Agent state for apps](/docs/build/agent-state)) |
 
 Older messages have what was recorded then. The live parts of the view (`partial` and `tools`) don't carry these fields: to time a running tool, match `tools[].callId` with `toolCalls[].id` in `messages`, where the call normally already has `startedAt`.

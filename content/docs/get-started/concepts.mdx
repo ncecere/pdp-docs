@@ -35,7 +35,7 @@ While platform admins have them turned on, everyone who signs in gets a **person
 
 ## Templates and the catalog
 
-An agent is deployed from a **template**. A template has **versions**; each version holds the agent's instructions (its system prompt), the model it runs on, the MCP servers its agents get, and whether apps may give its agents their own MCP servers for a thread. Versions never change: an edit is a new version, and each agent stays on the version it has until someone upgrades it.
+An agent is deployed from a **template**. A template has **versions**; each version holds the agent's instructions (its system prompt), the model it runs on, the MCP servers its agents get, whether apps may give its agents their own MCP servers for a thread, its **kind** (an assistant, a [triage agent or a deep researcher](/docs/teams/agent-kinds)), the tools that need a person's [approval](/docs/teams/tool-approvals), and whether its agents may set their own schedules. Versions never change: an edit is a new version, and each agent stays on the version it has until someone upgrades it.
 
 - **Platform templates** are written by platform admins and are always in the catalog.
 - **Team templates** are private to their team. A team's owners and admins can ask to publish one; a platform admin approves it into the catalog or rejects it with a note.
@@ -56,9 +56,19 @@ A thread is **shared** (everyone who may use the agent sees it) or **private** (
 
 ## Hibernating runtimes
 
-An agent runs only while it is used. When it has no reply in progress, no open event stream and no request for `AGENTS_IDLE_TIMEOUT` (10 minutes by default), it **hibernates**: its runtime stops and closes its database connection. The next request wakes it, and its conversations are where it left them because they live in PostgreSQL. Listing an agent's threads never wakes it; reading or writing a conversation does. An open event stream on a thread keeps the agent awake.
+An agent runs only while it is used. When it has no reply in progress, no open event stream, no background work (a background subagent, a tool call still running) and no request for `AGENTS_IDLE_TIMEOUT` (10 minutes by default), it **hibernates**: its runtime stops and closes its database connection. The next request wakes it, and its conversations are where it left them because they live in PostgreSQL. Listing an agent's threads never wakes it; reading or writing a conversation does. An open event stream on a thread keeps the agent awake.
+
+Background work keeps it awake only up to a ceiling (`AGENTS_BACKGROUND_MAX`, 2 hours by default): past it the platform stops that work and the agent may hibernate. Work that only **waits for a person** (a tool approval) doesn't keep it awake at all: the wait is stored, and the answer wakes the agent. The agent's **Overview** says what keeps it awake.
 
 How a runtime starts depends on the **launcher**: a local process (development), a Kubernetes pod, or a Kubernetes Agent Sandbox, optionally claimed from a warm pool of standby runtimes. See [Operate](/docs/operate).
+
+## Triggers and runs
+
+A **trigger** starts work without a person: a **schedule** (cron in a time zone) or a **webhook** (an address your systems POST to, signed with a secret). Each fire wakes the agent and sends it a message as the trigger, never as a person, with the team's models and MCP servers. Each fire is a **run**, with its status and cost, under limits: runs at once, a maximum run time, daily budgets and back-off. An agent can also set its own reminders when its template allows it. See [Triggers and runs](/docs/teams/triggers).
+
+## Tool approvals
+
+A template version can list tools that **wait for a person's approval** before they run. The people allowed approve or deny each call in the console or through the API; a denied call is refused and the agent is told why. See [Tool approvals](/docs/teams/tool-approvals).
 
 ## Models and providers
 
@@ -68,7 +78,7 @@ By default agents reach models through the platform's **model gateway** (proxy m
 
 ## MCP servers
 
-An **MCP server** gives agents tools (remote servers, Streamable HTTP). Platform admins add servers and publish them; teams can add their own. A template version gives its agents some or all of a server's tools. Apps can also give an agent their own MCP servers for one thread, when the template allows it. See [MCP servers](/docs/administer/mcp-servers), [Team MCP servers](/docs/teams/mcp-servers) and [Thread MCP servers](/docs/build/thread-mcp-servers).
+An **MCP server** gives agents tools (remote servers, Streamable HTTP). Platform admins add servers and publish them; teams can add their own. A template version gives its agents some or all of a server's tools. Apps can also give an agent their own MCP servers for one thread, when the template allows it. In proxy mode each request carries a signed **identity token** saying which agent calls and, when the platform knows, for which person, so a server can act for that person ([MCP identity tokens](/docs/build/mcp-identity)). See [MCP servers](/docs/administer/mcp-servers), [Team MCP servers](/docs/teams/mcp-servers) and [Thread MCP servers](/docs/build/thread-mcp-servers).
 
 ## Service accounts, API keys and connected apps
 

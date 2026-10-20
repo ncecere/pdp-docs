@@ -40,11 +40,14 @@ Both service-account mode and OAuth Connect are supported; an app can offer both
 Bearer credentials reach the **agent routes** and a few readings:
 
 - agents, threads, messages, events and thread MCP servers (`/v1/agents…`, `/v1/teams/{team}/agents…`);
+- agents' exposed documents, tool approvals (`/v1/me/approvals` for people), and reading triggers, trigger limits and runs;
 - template listings (`GET /v1/agent-templates`, the team's templates);
 - a team's models, usage, limits and MCP servers;
 - `GET /v1/me`, `GET /v1/teams` and `GET /v1/teams/{team}`, for people only: a service account key gets `403 person_required`.
 
-Everything else (administration, members, invites, creating keys, service accounts, connected apps, consent) needs a **browser session**. `PUT …/agents/by-key/…` takes editor service accounts in a shared team, and the owner of a personal workspace (by any of their credentials) in that workspace ([Agents for your app's users](/docs/build/agents-by-key)). Moving an agent takes people only, not service accounts. App secrets reach `GET /v1/app/events` and `GET /v1/app/usage` and nothing else.
+Everything else (administration, members, invites, creating keys, service accounts, connected apps, consent) needs a **browser session**. `PUT …/agents/by-key/…` takes editor service accounts in a shared team, and the owner of a personal workspace (by any of their credentials) in that workspace ([Agents for your app's users](/docs/build/agents-by-key)). Moving an agent takes people only, not service accounts. Creating and changing [triggers](/docs/teams/triggers) needs a team owner's or admin's browser session. App secrets reach `GET /v1/app/events` and `GET /v1/app/usage` and nothing else.
+
+A **webhook delivery** (`POST /v1/hooks/{hookId}`) takes no credential at all: its signature, made with the trigger's secret, is the credential. See [Webhooks and completion callbacks](/docs/build/webhooks).
 
 ## Conventions
 
@@ -75,9 +78,13 @@ For a person, it returns who they are, their groups, their teams and their capab
   <Card title="Creating agents safely" href="/docs/build/creating-agents">Retry agent creation with an Idempotency-Key.</Card>
   <Card title="Threads and messages" href="/docs/build/threads-and-messages">Start, list, page, search, send, steer and stop.</Card>
   <Card title="Event streams" href="/docs/build/events">Whole views or deltas, and every thread at once.</Card>
+  <Card title="Agent state for apps" href="/docs/build/agent-state">Tool details and the documents an agent exposes.</Card>
   <Card title="Private threads and authors" href="/docs/build/private-threads">Visibility, authors and message metadata.</Card>
   <Card title="Thread MCP servers" href="/docs/build/thread-mcp-servers">Give an agent your user's MCP servers for one thread.</Card>
+  <Card title="Webhooks and callbacks" href="/docs/build/webhooks">Start runs with a signed webhook; verify the completion callback.</Card>
   <Card title="Errors and limits" href="/docs/build/errors-and-limits">Error codes, rate limits and retries.</Card>
+  <Card title="Building a custom agent" href="/docs/build/custom-agents">Your own tools, documents and guards with the runtime library.</Card>
+  <Card title="MCP identity tokens" href="/docs/build/mcp-identity">For MCP server authors: who a call is for, signed by the platform.</Card>
 </Cards>
 
 The full reference is generated from the OpenAPI document: see [API reference](/docs/api). The API may change between releases before 1.0.

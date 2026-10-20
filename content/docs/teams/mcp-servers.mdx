@@ -44,11 +44,13 @@ A team's server is for that team only, like a team's own models: it never reache
 
 Agents call a team's server only through the platform's MCP proxy (`/mcp-proxy/server/<id>` on the gateway). The proxy adds the headers, refuses tools the template version left out, and records each call. Agents never see the headers.
 
+Since v0.4 the proxy also sends the server a signed **identity token** with every request: the calling agent, the team, the thread's visibility and, in a personal workspace or a private thread, the person the call is for. The server's **Settings** tab has the **Identity** settings: **Send the identity token** (on by default), **Token audience** and **Include the person's email** (off by default). If you write the server, see [MCP identity tokens](/docs/build/mcp-identity).
+
 The address is guarded the same way as a team's model providers: `https`, public or inside a private network platform admins listed, never loopback, link-local or metadata addresses, checked when you save it and again on every connection. See [Team models](/docs/teams/models#proxy-only-through-the-address-guard).
 
 ## What every thread shares
 
-An agent's MCP servers act with the same credentials in every thread of that agent. If a server keeps data (a notes server, a ticket system), everyone who uses the agent shares it, whatever the threads' visibility.
+An agent's MCP servers act with the same credentials in every thread of that agent. If a server keeps data (a notes server, a ticket system), everyone who uses the agent shares it, whatever the threads' visibility, unless the server keeps it per person using the identity token.
 
 ## When adding is off
 

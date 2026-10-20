@@ -18,14 +18,20 @@ Apps and browsers reach agents **only through the platform**. It authenticates e
 
 ## What it trusts
 
-Agents run **templates**, not uploaded code: instructions, a model and MCP servers, on the platform's own runtime image. Team templates reach other teams only after a platform admin's review. Teams can't run code of their own; that needs stronger isolation first (see Known limits).
+Agents run **templates**, not uploaded code: instructions, a model, MCP servers and a kind, on the runtime image the operator deploys (the platform's own, or a [custom agent](/docs/build/custom-agents) the operator built with the runtime library). Team templates reach other teams only after a platform admin's review. Teams can't run code of their own; that needs stronger isolation first (see Known limits).
+
+Whatever a runtime reports is untrusted input: its status, thread and approval reports, the versions it runs. Code in a runtime has the agent's database role and gateway credential, and nothing more.
 
 ## Teams and people
 
 - Team and platform roles are checked in the same database transaction as each change, and each change is audited in that transaction.
 - Platform roles never reach conversations. Platform admins and auditors see every team's agents (settings, status, usage) read-only: they can't use, change or hibernate them (since v0.1.1 hibernating another team's agent answers 403). A platform admin's read of a conversation needs a reason and is recorded in the team's log.
 - Personal API keys act as their person. Apps connected with OAuth Connect act as their person **without** the platform role. Service accounts act in their own team only.
-- Administration, members, keys and service accounts need a browser session: a stolen key can't create more keys or change roles.
+- Administration, members, keys and service accounts need a browser session: a stolen key can't create more keys or change roles. So do creating and changing triggers, which spend the team's money with nobody present.
+- **Unattended runs act as no person.** A trigger's run uses the team's models and MCP servers, never a person's app connection or credentials, and never a private thread or a thread with an app's MCP servers. See [Triggers and runs](/docs/teams/triggers).
+- **Webhooks** start nothing without a valid HMAC signature less than 5 minutes old; a replayed delivery returns the first run. See [Webhooks](/docs/build/webhooks).
+- **Tool approvals** let a person approve sensitive tool calls before they run; platform staff can't decide them. See [Tool approvals](/docs/teams/tool-approvals).
+- **MCP identity tokens** name a person only from the platform's own records, never from what a runtime says, and the runtime never holds the signing key or a token. See [MCP identity tokens](/docs/build/mcp-identity).
 
 ## Browser sessions
 
@@ -50,7 +56,7 @@ Threads that the platform names itself, with an unguessable ID (`POST /v1/agents
 
 ## Secrets and keys
 
-- **Provider keys, MCP headers, apps' thread MCP headers, each agent's database password and runtime token, and the identity provider refresh tokens kept for group re-checks** are encrypted with `ENCRYPTION_KEY` and never returned by the API. Agents get provider keys only for direct-mode providers and the platform's default model; in proxy mode the gateway adds them.
+- **Provider keys, MCP headers, apps' thread MCP headers, each agent's database password and runtime token, the identity provider refresh tokens kept for group re-checks, triggers' webhook and callback secrets, and the MCP identity signing keys** are encrypted with `ENCRYPTION_KEY` and never returned by the API. Agents get provider keys only for direct-mode providers and the platform's default model; in proxy mode the gateway adds them.
 - **API keys, service account keys and OAuth tokens** are stored only as HMAC-SHA256 digests under `API_KEY_PEPPER`. They are shown once, never logged.
 - **Runtime tokens and database passwords** reach Kubernetes runtimes through a per-agent Secret, never the pod spec; with a warm pool, through the activation request, stored nowhere in Kubernetes.
 
@@ -59,6 +65,7 @@ Threads that the platform names itself, with an unguessable ID (`POST /v1/agents
 - **`API_KEY_PEPPER`**: set the new value, and the old one as `API_KEY_PEPPER_PREVIOUS`. Keys made with the old pepper keep working and are re-digested on their next use (`*.pepper_rehash` in the audit log). `doctor` counts keys still on the old pepper. After 2 to 4 weeks, remove `API_KEY_PEPPER_PREVIOUS`; keys not used by then stop working.
 - **`ENCRYPTION_KEY`**: set the new value, and the old one as `ENCRYPTION_KEY_PREVIOUS`; restart; run `pi-durable-platform rekey` to re-seal every stored secret under the new key; check `doctor`; then remove the old key. See [Rotating keys](/docs/operate/key-rotation) for the steps and for what `rekey` does and doesn't do.
 - **The warm pool's activation token**: see [Agent Sandbox](/docs/operate/agent-sandbox#rotating-the-activation-token).
+- **The MCP identity signing key**: `pi-durable-platform rotate-mcp-identity-key`. See [Rotating keys](/docs/operate/key-rotation#the-mcp-identity-signing-key).
 
 ## What metrics and traces reveal
 
@@ -66,14 +73,16 @@ The metrics port has **no authentication**: keep it on a private network, never 
 
 ## Addresses others choose
 
-Teams' own providers and MCP servers, apps' metadata documents and apps' MCP servers are addresses chosen by teams or apps. The platform guards them (public addresses, admin-listed private networks, allowed hosts, no redirects, DNS pinned per connection). See [Network isolation](/docs/operate/network-isolation#what-the-platform-guards-itself).
+Teams' own providers and MCP servers, triggers' completion callbacks, apps' metadata documents and apps' MCP servers are addresses chosen by teams or apps. The platform guards them (public addresses, admin-listed private networks, allowed hosts, no redirects, DNS pinned per connection). See [Network isolation](/docs/operate/network-isolation#what-the-platform-guards-itself).
 
 ## Known limits
 
 - **Agents share the database server**: every agent role can see that other roles' sessions exist, and there are no per-role quotas beyond a connection limit. Cross-agent interference with ownership is closed, but uploaded agents would still need a storage proxy instead of database credentials, or hostile-code isolation.
 - **A compatibility lock stays for now**: runtimes also take the older release's advisory lock while any older runtime may still run. It is for rolling upgrades and is to be removed later.
 - **No hostile-code isolation yet**: running teams' own code needs sandboxed runtimes (gVisor or Kata) first.
-- **Shared agent tools**: every thread of an agent uses the same MCP credentials. Private threads hide conversations, not what an MCP server stores.
+- **Shared agent tools**: every thread of an agent uses the same MCP credentials. Private threads hide conversations, not what an MCP server stores, unless the server keeps data per person from the identity token.
+- **An agent's runtime can choose among its own threads** for the MCP identity token: in a shared team, a runtime working on a shared thread could name one of its agent's private threads and get a token naming that thread's creator. Today runtimes run the operator's code only.
+- **Webhook payloads are untrusted text** given to a model that can call the team's tools: frame them as data, and use tool approvals for tools that write.
 - **Client-chosen thread IDs can be guessed if the client picks guessable ones**: whoever uses an ID first starts that thread. A shared thread can then be joined by anyone who may use the agent, and a private one is `404` for everyone else. Use `POST /v1/agents/{id}/threads`, or random IDs.
 - **Group re-checks have gaps**: the bootstrap admin and development personas are never re-checked, and people whose provider issued no refresh token are checked only when they sign in. See [Re-checking groups](/docs/operate/oidc#what-isnt-covered).
 - **Database roles are server-wide**: agent roles outlive a dropped agents database. `doctor` lists them and `prune-roles` drops them.

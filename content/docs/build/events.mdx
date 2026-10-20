@@ -28,7 +28,9 @@ data: {"busy":true,"messages":[…],"partial":{"text":"The release added…","th
 | `busy` | A reply is running |
 | `messages` | The transcript: `user`, `assistant` and `tool` messages ([fields](/docs/build/private-threads#message-metadata)) |
 | `partial` | The reply being written: `text` and `thinking`. Absent when no reply is being written |
-| `tools` | Tools running now: `callId`, `name`, `status` and `output` so far |
+| `tools` | Tools running now: `callId`, `name`, `status` and `output` so far, and the tool's `details` for apps (or `detailsOmitted`) |
+| `documents` | The agent's exposed documents in this thread, `{kind: {revision}}`. Absent when none ([Agent state for apps](/docs/build/agent-state)) |
+| `approvals` | The thread's tool calls waiting for a person's approval. Absent when none ([Tool approvals](/docs/teams/tool-approvals)) |
 | `earlierCursor` | With `limit` only, when earlier messages exist (see below) |
 
 Replace your view with each event's. This is simple, but every event repeats the whole transcript, so a long conversation sends a lot for each new token. For those, use deltas.
@@ -75,11 +77,15 @@ data: {"type":"partial.appended","seq":4,"text":"The release"}
 | `partial.appended` | `text`, `thinking` (either may be absent) | Append them to `partial.text` and `partial.thinking` |
 | `partial.cleared` | | Remove `partial` (the reply became a message, or was stopped) |
 | `tool.started` | `tool`, `startedAt`, `elapsedMs` | Append `tool` to `tools` |
-| `tool.updated` | `callId`, `status`, `output` or `outputAppended`, `startedAt`, `elapsedMs` | Find the tool by `callId`: set `status` if present; `output` replaces its output (`null`: none); `outputAppended` extends it |
+| `tool.updated` | `callId`, `status`, `output` or `outputAppended`, `details`, `detailsOmitted`, `startedAt`, `elapsedMs` | Find the tool by `callId`: set `status` if present; `output` replaces its output (`null`: none); `outputAppended` extends it; `details`, when present, replaces its details (`null`: none) |
 | `tool.finished` | The same as `tool.updated` | The same; the status became `done` |
 | `tool.removed` | `callId` | Remove the tool with that `callId` (its round ended) |
 | `tools.set` | `tools` | Replace `tools` (rare: the list was reordered) |
 | `run` | `busy` | Set `busy` |
+| `document.updated` | `kind`, `revision` | Set `documents[kind]` to `{revision}`, and read the document again if you show it. The event never carries the document |
+| `approvals.set` | `approvals` | Replace `approvals` (`[]` clears it) |
+
+A tool call waiting for an approval, and then its decision, also show on the call itself (`toolCalls[].approval`), as a `message.updated` of its reply.
 
 Tool events also carry `startedAt` (Unix milliseconds) and `elapsedMs` (how long the call had run when the event was sent), so you can show a running timer. They are live metadata, not part of the view.
 
@@ -90,12 +96,14 @@ Applying the events in order to the snapshot gives exactly the view a new snapsh
 The loop reads the stream, keeps the view and the last `seq`, and applies each event. This one runs on your server (Node 22, TypeScript); a browser's `EventSource` can't send an `Authorization` header.
 
 ```ts
-type Tool = { callId: string; name: string; status: string; output?: string };
+type Tool = { callId: string; name: string; status: string; output?: string; details?: unknown };
 type View = {
   busy: boolean;
   messages: { id: string; role: string; [k: string]: unknown }[];
   partial?: { text: string; thinking: string };
   tools: Tool[];
+  documents?: Record<string, { revision: string }>;
+  approvals?: unknown[];
   earlierCursor?: string;
 };
 
@@ -120,11 +128,17 @@ function apply(view: View | undefined, e: any): View | undefined {
         if (e.output === null) delete next.output;
         else if (e.output !== undefined) next.output = e.output;
         if (e.outputAppended !== undefined) next.output = (next.output ?? "") + e.outputAppended;
+        if (e.details !== undefined) next.details = e.details;
         return next;
       }) };
     case "tool.removed": return { ...view, tools: view.tools.filter((t) => t.callId !== e.callId) };
     case "tools.set": return { ...view, tools: e.tools };
     case "run": return { ...view, busy: e.busy };
+    case "document.updated": return { ...view, documents: { ...view.documents, [e.kind]: { revision: e.revision } } };
+    case "approvals.set": {
+      const { approvals, ...rest } = view;
+      return e.approvals.length > 0 ? { ...rest, approvals: e.approvals } : rest;
+    }
   }
   return view; // a type this client doesn't know: ignore it
 }

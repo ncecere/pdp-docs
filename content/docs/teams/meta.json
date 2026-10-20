@@ -1,6 +1,6 @@
 {
   "title": "Teams",
-  "description": "Running a team's agents, templates, models, MCP servers and service accounts",
+  "description": "Running a team's agents, templates, triggers, approvals, models, MCP servers and service accounts",
   "root": true,
-  "pages": ["index", "members-and-roles", "deploy-agents", "templates", "models", "mcp-servers", "service-accounts", "usage", "audit-log", "limits"]
+  "pages": ["index", "members-and-roles", "deploy-agents", "templates", "agent-kinds", "triggers", "tool-approvals", "models", "mcp-servers", "service-accounts", "usage", "audit-log", "limits"]
 }

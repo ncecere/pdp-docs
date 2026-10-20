@@ -10,6 +10,7 @@ Teams use PDP to:
 - **deploy** agents from a catalog of reviewed templates;
 - **test** them in the console with a chat;
 - **reach** them from their own apps through the API, with a service account key or as a person who connected the app;
+- **run** them on their own, on schedules and webhooks, with a person approving sensitive tool calls;
 - **manage** them: models, MCP servers, keys, usage and an audit log.
 
 PDP is the console and the API, not the end-user product. People usually talk to agents through a team's own app, such as a chat app or a support tool. The app calls PDP, and PDP relays the conversation to the agent.
@@ -34,10 +35,10 @@ On Kubernetes each runtime is a pod, or a [Kubernetes Agent Sandbox](https://age
 
 <Cards>
   <Card title="Use agents" href="/docs/use">Test an agent in the console, shared and private threads, your personal workspace, API keys and connected apps.</Card>
-  <Card title="Teams" href="/docs/teams">Deploy agents, write team templates, add the team's own models and MCP servers, service accounts, usage and the audit log.</Card>
+  <Card title="Teams" href="/docs/teams">Deploy agents, write team templates, triggers and tool approvals, add the team's own models and MCP servers, service accounts, usage and the audit log.</Card>
   <Card title="Administer" href="/docs/administer">Platform admins and auditors: people and teams, template review, the model and MCP catalogs, settings, usage and audit.</Card>
   <Card title="Operate" href="/docs/operate">Install on Kubernetes, every setting, OIDC, the two databases, network isolation, backups, upgrades and security.</Card>
-  <Card title="Build apps" href="/docs/build">Reach agents from your app: keys, OAuth Connect, threads, messages and events.</Card>
+  <Card title="Build apps" href="/docs/build">Reach agents from your app: keys, OAuth Connect, threads, messages, events and webhooks. Build custom agents, and MCP servers that know who calls.</Card>
   <Card title="API reference" href="/docs/api">The OAuth endpoints and the management API, generated from its OpenAPI document.</Card>
 </Cards>
 
@@ -45,10 +46,9 @@ On Kubernetes each runtime is a pod, or a [Kubernetes Agent Sandbox](https://age
 
 PDP v0.3.0 is pre-1.0 software. It brought paging and search, incremental event streams, steering, safe agent creation, moving agents between teams, and OAuth Connect for apps with many people. Some things are planned and not built:
 
-- Teams can't upload their own agent code. Agents come from templates: instructions, a model and MCP servers. Uploads need stronger runtime isolation first.
+- Teams can't upload their own agent code. Agents come from templates: instructions, a model, MCP servers and a kind. An operator can build [a custom agent](/docs/build/custom-agents) into the runtime image for the whole install; choosing a runtime per template needs stronger runtime isolation first.
 - There are no files or images. Messages are text.
-- Personal workspaces record a monthly budget but don't enforce it.
-- An agent that hibernates can't wake itself for scheduled work.
+- Budgets are enforced per trigger and per agent's triggered runs only: personal workspaces record a monthly budget but don't enforce it, and teams have none yet.
 
 See the known limitations in [Release notes v0.3.0](/docs/releases/v0-3-0#known-limitations) (and those of [v0.2.0](/docs/releases/v0-2-0#known-limitations) and [v0.1.0](/docs/releases/v0-1-0#known-limitations) that remain), and the project's [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md) for the order in which they're planned.
 

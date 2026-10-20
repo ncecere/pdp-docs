@@ -9,12 +9,13 @@ Pi Durable Platform is built so that agents need almost no network: in proxy mod
 
 | From | To | Port | Why |
 |---|---|---|---|
-| Your ingress | Platform | 8098 | Web app, API, OAuth |
+| Your ingress | Platform | 8098 | Web app, API, OAuth, and webhook deliveries (`/v1/hooks/…`) from the systems that start [triggered runs](/docs/teams/triggers) |
 | Platform | Agent runtimes | 4100 | Relaying conversations, activation (warm pool) |
 | Agent runtimes | Platform gateway | 8099 | Models and MCP servers in proxy mode, thread and usage reports |
 | Platform, agent runtimes | PostgreSQL | 5432 | The platform: both databases. Runtimes: the agents database only |
 | Platform | Kubernetes API | 443/6443 | Starting and stopping runtimes |
-| Platform | Identity provider, model providers, MCP servers, apps' metadata documents | 443 | Sign-in, proxying, reading tools, OAuth Connect |
+| Platform | Identity provider, model providers, MCP servers, apps' metadata documents, triggers' completion callbacks | 443 | Sign-in, proxying, reading tools, OAuth Connect, callbacks |
+| MCP servers that verify identity tokens | Platform (through your ingress) | 443 | Fetching the signing keys at `<APP_URL>/.well-known/mcp-identity-jwks.json` ([MCP identity tokens](/docs/build/mcp-identity)) |
 | Your metrics scraper | Platform | 9090 | Prometheus metrics (`METRICS_ADDR`), only if you turn them on. No authentication: allow your scraper only |
 | Platform | Tracing collector | 4318 | OpenTelemetry traces, only if you set `OTEL_EXPORTER_OTLP_ENDPOINT`. The chart's public HTTPS egress covers a collector on a public address and port 443; one in the cluster, on a private address or on another port needs a rule of its own (`networkPolicy.egress.tracing`) |
 | Agent runtimes | Direct-mode providers and MCP servers | 443 | Only if you use direct mode |
@@ -81,5 +82,6 @@ Some addresses are chosen by people other than the operator, so the platform che
 - **Apps' Client ID Metadata Documents** (OAuth Connect): public addresses only, no redirects, at most 16 KiB, 5 seconds.
 - **Apps' logos** (OAuth Connect, since v0.1.2): the platform fetches an app's published logo itself, from public addresses only, over `https`, without redirects, at most 256 KiB, and serves it from its own address so the console never loads an image from another site.
 - **Apps' MCP servers for a thread**: only hosts in `AGENTS_CLIENT_MCP_HOSTS` (none by default).
+- **Triggers' completion callbacks** (since v0.4): the same guard as teams' own MCP servers (`https`, public or inside an allowed private network), checked when saved and at every connection, with no redirects, no proxy and a 10 second timeout. The response is never stored or shown.
 
 Platform-level providers and MCP servers that admins add aren't guarded, so admins can point them at internal services. Your NetworkPolicies decide what the platform itself may reach.

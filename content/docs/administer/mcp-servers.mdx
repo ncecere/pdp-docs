@@ -29,13 +29,25 @@ The platform connects and reads the server's tools when you add it. **Refresh to
 - **Proxy** (the default): agents call the server through the platform's gateway (`/mcp-proxy/server/<id>`). The gateway adds the headers, refuses `tools/call` for tools the template version left out, and records each call. Agents never see the headers.
 - **Direct**: agents get the URL and headers and call the server themselves. The agents' network must allow it, and the platform doesn't see the calls.
 
+### Identity
+
+Since v0.4, in proxy mode, every request the gateway forwards carries a short-lived token the platform signs (`MCP-Gateway-Identity`): the agent, its team, the thread's visibility and, in a personal workspace or a private thread, the person the call is for. Servers verify it with the platform's published keys, `<APP_URL>/.well-known/mcp-identity-jwks.json`. The server's **Settings** tab has, under **Identity**:
+
+| Setting | Default | |
+|---|---|---|
+| **Send the identity token** | On | Turn it off for servers outside your organisation |
+| **Token audience** | Empty: the server's URL | What the token's `aud` says |
+| **Include the person's email** | Off | Off, the server finds the person by their sign-in identity (issuer and subject) |
+
+Direct servers get no token. For server authors, see [MCP identity tokens](/docs/build/mcp-identity); for the signing key, [Rotating keys](/docs/operate/key-rotation#the-mcp-identity-signing-key).
+
 ## How agents get tools
 
 A template version lists servers, each with all its tools or some of them. Agents on that version get them as `mcp__<slug>__<tool>`, defined from the tool list the platform stored and connected on first use. With more than 20 MCP tools, they're deferred behind a `tool_search` tool.
 
 A server that uses the MCP Apps extension can mark a tool for its own interface only (`_meta.ui.visibility` without `"model"`). The platform leaves such tools out of the list it reads from the server, so they're never offered to a model. Tool lists stored before v0.3.0 (the platform's servers and teams' servers, on or off) are read again once, in the background, when the platform starts, so such tools stop being offered. A server that can't be reached then keeps its old list, with the error shown, and is tried again at the next start. The platform doesn't show MCP Apps' interfaces yet: the server's other tools work as plain tools.
 
-Every agent and every thread uses the same headers. Anything the server keeps (notes, tickets) is shared by everyone who uses those agents. Prefer servers whose credentials suit everyone a template reaches.
+Every agent and every thread uses the same headers. Anything the server keeps (notes, tickets) is shared by everyone who uses those agents, unless the server keeps it per person from the identity token. Prefer servers whose credentials suit everyone a template reaches.
 
 ## Publishing, turning off, deleting
 

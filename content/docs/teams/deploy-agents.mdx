@@ -40,14 +40,20 @@ The agent opens on its **Test** tab. Deploying doesn't start it: its first messa
 
 An agent has these tabs:
 
-- **Overview**: its status (running now or hibernated, turned off), template and version, model, tools (the MCP servers it can call), storage, its usage over the last 30 days, and **Use it from your app** with example requests.
+- **Overview**: its status (running now or hibernated, turned off), template and version, model, tools (the MCP servers it can call), storage, its usage over the last 30 days, and **Use it from your app** with example requests. While it runs, the status says what keeps it awake (a reply, an open stream, background work, recent use) or that nothing does and it hibernates shortly.
 - **Test**: a chat with it ([Testing an agent](/docs/use/test-chat)).
+- **Approvals** (since v0.4): its tool calls waiting for a person, and recent decisions ([Tool approvals](/docs/teams/tool-approvals)).
+- **Triggers** and **Runs** (since v0.4): the schedules and webhooks that start it without a person, and each run they started ([Triggers and runs](/docs/teams/triggers)). Service-managed agents have neither.
 - **Conversations**: only for platform admins ([Reading conversations](/docs/administer/reading-conversations)).
 - **Settings**: name, description and model; turning it off; moving it to another team; deleting it.
 
 While the agent is running, its page header has **Hibernate**, which stops its runtime now; the next request wakes it. Any member can use it; platform staff who aren't on the team can't (since v0.1.1).
 
 <Screenshot slot="agent-overview" />
+
+### When it can't start on its runtime
+
+If the Overview says **The agent can't start on its runtime**, the platform refused to start it on a runtime older than the one that last wrote its conversations. Requests that would wake it answer `409 runtime_too_old`. It happens after the operator rolls the runtime image back; the fix is to deploy the current runtime again. See [Doctor and health](/docs/operate/doctor-and-health#common-problems).
 
 ## Upgrade to a new version
 
@@ -69,7 +75,7 @@ If a platform admin turns off or unpublishes the model an agent runs on, its Ove
 
 ## Move it
 
-**Move agent…** in **Settings** (owners and admins of both teams) moves the agent, with its conversations, to another team or to your personal workspace. The dialog shows what changes before you confirm. See [Moving an agent](/docs/use/moving-an-agent).
+**Move agent…** in **Settings** (owners and admins of both teams) moves the agent, with its conversations, to another team or to your personal workspace. The dialog shows what changes before you confirm. Its triggers are deleted. See [Moving an agent](/docs/use/moving-an-agent).
 
 ## Delete it
 

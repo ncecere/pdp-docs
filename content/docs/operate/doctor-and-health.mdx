@@ -11,7 +11,7 @@ description: "pi-durable-platform doctor, the /healthz and /readyz probes, logs 
 2. **Safety**: the [production safety checks](/docs/operate/configuration#production-safety-checks).
 3. **PostgreSQL**: connects to the platform database and reports its version and the time it took.
 4. **Migrations**: whether the database is at the binary's migration.
-5. **Keys**: which pepper the usable API keys are on, and which `ENCRYPTION_KEY` every stored secret is sealed with.
+5. **Keys**: which pepper the usable API keys are on, which `ENCRYPTION_KEY` every stored secret is sealed with, and (since v0.4) which key signs MCP identity tokens.
 6. **Group re-check** (with `OIDC_ALLOWED_GROUPS`): how many recently active people the platform can't re-check, because it has no refresh token for them.
 7. **Agents database** (since v0.1.1): connects to `AGENTS_DATABASE_URL` and checks that its role can provision agents. It reads the role's attributes and privileges and creates nothing.
 8. **Agent roles**: whether the agents database has roles left behind by agents that no longer exist.
@@ -25,6 +25,7 @@ Each check ends as **ok**, **info** (worth knowing), **warn** (something to do, 
 |---|---|---|
 | `keys pepper` | Every usable key, service account key and app token is under `API_KEY_PEPPER` | **Info** while some are on `API_KEY_PEPPER_PREVIOUS` (they move when used), or on a pepper no longer configured (those no longer work: revoke them). **Info** too when none is left on the previous pepper: you can remove it |
 | `keys encryption` | Every stored secret is sealed with `ENCRYPTION_KEY` | **Warn** while any value is still sealed with `ENCRYPTION_KEY_PREVIOUS`, naming the columns and counts: run `rekey`, then remove the previous key. **Fail** when a value is sealed with neither key, since the platform can't read it. **Info** when none is under the previous key and `ENCRYPTION_KEY_PREVIOUS` can go |
+| `keys mcp-identity` (since v0.4) | A key signs [MCP identity tokens](/docs/build/mcp-identity) now; says which and since when, and counts keys waiting to sign | **Warn** when there is no key yet (`serve` creates it at start) or the signing key is older than 90 days: [rotate it](/docs/operate/key-rotation#the-mcp-identity-signing-key) (only **info** once its successor is published). **Fail** when keys exist but none signs now |
 
 The `keys encryption` check covers every sealed column that [`rekey`](/docs/operate/key-rotation) knows, including the identity provider refresh tokens that [group re-checks](/docs/operate/oidc#re-checking-groups) keep (`user_idp_tokens`). It reads only the key IDs stored with the values, and opens nothing. See [Rotating keys](/docs/operate/key-rotation).
 
@@ -114,3 +115,6 @@ The platform also exports Prometheus metrics, on a port of its own, and OpenTele
 | Agents answer `503 agent_unavailable` | The runtime didn't start in time: check the agent pod's events and logs, the image, `AGENTS_IMAGE_PULL_SECRET`, quotas |
 | Agents start but every reply fails | Agents can't reach `AGENTS_GATEWAY_URL` (the gateway listens on `127.0.0.1` by default), or the model's provider refuses: see the thread's last error |
 | Everyone is refused at sign-in with "A verified email address is required" | Your provider doesn't send `email_verified`: see [OIDC sign-in](/docs/operate/oidc) |
+| An agent answers `409 runtime_too_old`, and its Overview says **The agent can't start on its runtime** | A runtime with a newer Pi durable package wrote the agent's data, and the runtime image now deployed is older: deploy the current runtime again (rolling a runtime back is not supported). If the runtime is current and the agent is still refused, the recorded version is wrong: `pi-durable-platform reset-storage-version --agent <id>` removes it (the next start records its own), or `--to <version>` sets it. It's audited. Never reset below a version that really wrote the agent's data |
+| MCP requests fail with `503 identity_unavailable` | The platform can't sign identity tokens, for example after `ENCRYPTION_KEY` changed without `ENCRYPTION_KEY_PREVIOUS`: see `keys mcp-identity` above |
+| An agent never hibernates | Its Overview says what keeps it awake: a reply, an open event stream, background work (up to `AGENTS_BACKGROUND_MAX`) or recent use |
