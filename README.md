@@ -2,7 +2,7 @@
 
 The user, team, administrator, operator and app-developer documentation for [Pi Durable Platform](https://github.com/ncecere/pi-durable-platform), the self-hosted console and API where teams deploy, test and manage durable agents built with [Pi](https://github.com/earendil-works/pi) and its durable package. It's published at <https://docs.pdp.bitop.dev>; the product's website is <https://pdp.bitop.dev>. Both addresses, the repositories and the release the docs describe are in `lib/site.ts`.
 
-The docs describe **Pi Durable Platform v0.2.0**, released on 2026-10-20; links into the product's repository are pinned at the `v0.2.0` tag (the roadmap links follow `main`). The product repository's own `DESIGN.md` and `docs/releases/` stay the engineering record. Pi Durable Platform is an independent project; nothing here implies an affiliation with Pi or its authors, and the site uses no Pi logos.
+The docs describe **Pi Durable Platform v0.2.0**, released on 2026-10-19; links into the product's repository are pinned at the `v0.2.0` tag (the roadmap links follow `main`). The product repository's own `DESIGN.md` and `docs/releases/` stay the engineering record. Pi Durable Platform is an independent project; nothing here implies an affiliation with Pi or its authors, and the site uses no Pi logos.
 
 A static site: [Fumadocs](https://fumadocs.dev) on Next.js with `output: "export"`, TypeScript and Tailwind CSS v4, served by nginx in a container. Search is Fumadocs' built-in static index, searched in the browser. No tracking, no cookies, no external fonts or CDNs: Inter is self-hosted.
 

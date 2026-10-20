@@ -23,7 +23,7 @@ export const productRepo = 'https://github.com/ncecere/pi-durable-platform';
 export const productVersion = 'v0.2.0';
 
 /** The date that release was published (YYYY-MM-DD, UTC). */
-export const productReleaseDate = '2026-10-20';
+export const productReleaseDate = '2026-10-19';
 
 /**
  * Links to files in the product's repository, pinned at the release's tag so
