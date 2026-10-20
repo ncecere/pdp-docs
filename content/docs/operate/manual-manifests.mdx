@@ -1,0 +1,161 @@
+---
+title: The objects by hand
+description: "What the Pi Durable Platform chart creates, written out as plain Kubernetes objects for the kubernetes launcher: namespaces, Secrets, the platform's Role, Deployment, Service, ingress, and the agent pods it creates."
+---
+
+Most installs should use the [Helm chart](/docs/operate/kubernetes) or the [Kustomize](/docs/operate/kustomize) resources. This page is a reference for what they create, written out for the `kubernetes` launcher (`AGENTS_LAUNCHER=kubernetes`): the platform creates a pod for each running agent and deletes it when the agent hibernates. Use it to understand the objects, or to build your own from them. The YAML is **an example to adapt**, not what the chart renders byte for byte (the chart also adds the [network policies](/docs/operate/kubernetes#network-policies), the namespaces' Pod Security level and more). Names such as `pi-durable-platform` and `agents.example.com` are placeholders.
+
+## 1. The images
+
+Use a release's images, pinned by digest (the digests are in its [release notes](/docs/releases)). Verify their signatures with cosign v3 or newer, with the release's tag in place of `<tag>`:
+
+```sh
+for image in pi-durable-platform pi-durable-platform-runtime; do
+  cosign verify ghcr.io/ncecere/$image:<tag> \
+    --certificate-identity https://github.com/ncecere/pi-durable-platform/.github/workflows/image.yml@refs/tags/<tag> \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+done
+```
+
+## 2. Databases
+
+Create the platform database and the agents database, and their roles, as [Databases](/docs/operate/databases) describes. The agents database's role needs `CREATEROLE` and `CREATE` on that database. Agent pods connect to the agents database with roles of their own, so it must be reachable from the agents' namespace.
+
+## 3. Namespaces
+
+Agents run in `AGENTS_NAMESPACE`, by default the platform's own namespace. A separate namespace for agents makes RBAC and network policies simpler:
+
+```sh
+kubectl create namespace pi-durable-platform
+kubectl create namespace pi-durable-agents
+```
+
+## 4. Secrets
+
+```sh
+kubectl -n pi-durable-platform create secret generic pi-durable-platform \
+  --from-literal=DATABASE_URL='postgres://pdp:<password>@db.example.com:5432/pdp?sslmode=require' \
+  --from-literal=AGENTS_DATABASE_URL='postgres://pdp_agents_admin:<password>@db.example.com:5432/pdp_agents?sslmode=require' \
+  --from-literal=ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=API_KEY_PEPPER="$(openssl rand -base64 32)" \
+  --from-literal=OIDC_CLIENT_SECRET='<from your identity provider>'
+```
+
+Keep `ENCRYPTION_KEY` and `API_KEY_PEPPER` in your secrets store too: a database backup is useless without them. Every secret setting can also be read from a file, with `<NAME>_FILE` (see [Configuration](/docs/operate/configuration)).
+
+## 5. The platform's permissions
+
+The platform talks to the Kubernetes API with its pod's service account token. In the agents' namespace it needs:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: pi-durable-platform-agents, namespace: pi-durable-agents }
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: pi-durable-platform-agents, namespace: pi-durable-agents }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: pi-durable-platform-agents }
+subjects:
+  - { kind: ServiceAccount, name: pi-durable-platform, namespace: pi-durable-platform }
+```
+
+It needs nothing outside that namespace. The [Agent Sandbox](/docs/operate/agent-sandbox) launcher needs other resources. The Role is the one the chart creates for this launcher.
+
+## 6. The Deployment and Service
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: pi-durable-platform } }
+  template:
+    metadata: { labels: { app: pi-durable-platform } }
+    spec:
+      serviceAccountName: pi-durable-platform
+      terminationGracePeriodSeconds: 75
+      containers:
+        - name: platform
+          image: ghcr.io/ncecere/pi-durable-platform@sha256:<platform digest>
+          args: [serve]
+          envFrom: [{ secretRef: { name: pi-durable-platform } }]
+          env:
+            - { name: APP_URL, value: https://agents.example.com }
+            - { name: MIGRATE_ON_START, value: "true" }
+            - { name: OIDC_ISSUER, value: https://idp.example.com }
+            - { name: OIDC_CLIENT_ID, value: pi-durable-platform }
+            - { name: BOOTSTRAP_ADMIN_SUBJECT, value: "<your OIDC subject>" }
+            - { name: TRUSTED_PROXIES, value: 10.0.0.0/8 }              # your ingress's addresses
+            - { name: AGENTS_LAUNCHER, value: kubernetes }
+            - { name: AGENTS_NAMESPACE, value: pi-durable-agents }
+            - { name: AGENTS_IMAGE, value: ghcr.io/ncecere/pi-durable-platform-runtime@sha256:<runtime digest> }
+            - { name: AGENTS_GATEWAY_ADDR, value: ":8099" }
+            - { name: AGENTS_GATEWAY_URL, value: http://pi-durable-platform.pi-durable-platform.svc.cluster.local:8099 }
+          ports:
+            - { name: http, containerPort: 8098 }
+            - { name: gateway, containerPort: 8099 }
+          readinessProbe: { httpGet: { path: /readyz, port: http } }
+          livenessProbe: { httpGet: { path: /healthz, port: http } }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: pi-durable-platform, namespace: pi-durable-platform }
+spec:
+  selector: { app: pi-durable-platform }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+    - { name: gateway, port: 8099, targetPort: gateway }
+```
+
+Notes:
+
+- **Replicas.** The example has one replica. With one, use `strategy: {type: Recreate}` on the Deployment, as the chart does, so the old pod is gone before the new one starts. The platform also runs as several replicas, with the `kubernetes` or `agent-sandbox` launcher: set `replicas: 2`, use `strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}` so there is always a ready replica, spread the pods over nodes, and add a PodDisruptionBudget. See [Running several replicas](/docs/operate/replicas).
+- **Metrics** are off unless you set `METRICS_ADDR`, for example `:9090`, and add a container port for it. The port has no authentication: don't put it in the Service the Ingress routes to, and let only your scraper reach it. See [Metrics and tracing](/docs/operate/metrics-and-tracing).
+- **`AGENTS_GATEWAY_ADDR`** defaults to `127.0.0.1:8099`, which agent pods can't reach: listen on `:8099` and set **`AGENTS_GATEWAY_URL`** to the address agents use, the Service's name and gateway port.
+- **Migrations**: with `MIGRATE_ON_START=true` the platform applies them at start. Otherwise run `pi-durable-platform migrate` (for example as a Job with the same image and `args: [migrate]`) before rolling out; a platform whose database is behind refuses to start. See [Upgrades and migrations](/docs/operate/upgrades).
+- **Shutdown**: on SIGTERM the platform fails readiness, waits `SHUTDOWN_DELAY` (5 s), then gives requests and event streams `SHUTDOWN_TIMEOUT` (60 s). Make `terminationGracePeriodSeconds` at least the two together (the example's 75 s, as in the chart). Open event streams end then; clients reconnect.
+- **The image has no shell.** Run checks with `kubectl exec deploy/pi-durable-platform -- /pi-durable-platform doctor`.
+
+## 7. Ingress
+
+Route your HTTPS host to the Service's `http` port (8098) only. Never route the gateway port: it is for agents. The OIDC redirect address is `https://agents.example.com/auth/callback`. Set `TRUSTED_PROXIES` to the ingress's addresses so the platform sees clients' real addresses for rate limits and the audit log.
+
+## 8. The agent pods
+
+For each running agent the platform creates a Secret and a pod named `agent-<id>` in `AGENTS_NAMESPACE`, labelled `app.kubernetes.io/managed-by: pi-durable-platform` and `pi-durable-platform/agent-id: <id>`. The pod:
+
+- runs the runtime image as user 10001, non-root, with a read-only root filesystem, all capabilities dropped, the `RuntimeDefault` seccomp profile, and a 64 MiB `/tmp`;
+- has no service account token and no service links;
+- requests 50m CPU and 160 MiB memory, limited to 1 CPU and 512 MiB;
+- gets its database URL and per-agent bearer token from its Secret, never from the pod spec;
+- listens on port 4100 and accepts only its own token.
+
+Optional settings: `AGENTS_RUNTIME_CLASS` runs the pods with a sandboxing RuntimeClass such as gVisor, and `AGENTS_IMAGE_PULL_SECRET` names a registry Secret in the agents' namespace. Hibernating deletes the pod and keeps the Secret; deleting the agent deletes both.
+
+Then restrict the network: the [chart's policies](/docs/operate/kubernetes#network-policies) are the ones to copy, and [Network isolation](/docs/operate/network-isolation) lists the connections.
+
+## 9. Check it
+
+```sh
+kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform doctor
+```
+
+Sign in as the bootstrap admin, create a team, deploy an agent and send it a message on its **Test** tab. A pod `agent-…` appears in the agents' namespace, and goes away after `AGENTS_IDLE_TIMEOUT` (10 minutes) without use.

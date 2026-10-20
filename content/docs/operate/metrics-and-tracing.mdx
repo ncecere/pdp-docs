@@ -1,0 +1,201 @@
+---
+title: Metrics and tracing
+description: "What Pi Durable Platform exports as Prometheus metrics and OpenTelemetry traces: the metrics port, how to scrape it with and without the Prometheus Operator, the Grafana dashboard and example alerts, and what the labels and spans never contain."
+---
+
+Pi Durable Platform exports **Prometheus metrics** on a port of its own, and, if you ask, **OpenTelemetry traces**. Both are off unless you turn them on. On Kubernetes the Helm chart turns the metrics on and ships what a scraper and Grafana need.
+
+## The metrics port
+
+`METRICS_ADDR` (for example `:9090`) starts a third listener, next to the web port (8098) and the agents' gateway (8099). It serves `GET /metrics` and nothing else: every other path is a `404`.
+
+| Where | `METRICS_ADDR` |
+|---|---|
+| The platform on its own | Empty by default: no metrics endpoint. In `.env.example` it is commented out |
+| The Helm chart and the Kustomize base | `:9090`, as a container port named `metrics` and a Service `<release>-metrics` (`pi-durable-platform-metrics`) |
+
+<Callout type="warn" title="The metrics port has no authentication">
+It is a port of its own so that it can stay private. Neither the web port nor the gateway serves `/metrics`, and the Ingress must never route to it. The chart's NetworkPolicy lets only the peers you list in `networkPolicy.metrics.from` reach it. By default that list is empty, so nothing can scrape it until you name your scraper.
+</Callout>
+
+`METRICS_ADDR` must be a listener of its own: the platform refuses to start if it is the same as `LISTEN_ADDR` or `AGENTS_GATEWAY_ADDR`. Outside Kubernetes, bind it to a private interface.
+
+## Scrape it
+
+### Allow your scraper
+
+With the chart, say which pods may reach the port. The peers are written as in a NetworkPolicy `from`:
+
+```yaml
+networkPolicy:
+  metrics:
+    from:
+      - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: monitoring } }
+        podSelector: { matchLabels: { app.kubernetes.io/name: prometheus } }
+```
+
+With Kustomize, use `components/monitoring` and patch the `from` of the NetworkPolicy `pi-durable-platform-ingress-metrics`: the component ships it for the `monitoring` namespace. See [Install with Kustomize](/docs/operate/kustomize).
+
+### With the Prometheus Operator
+
+Turn on the chart's ServiceMonitor, and give it the labels your Prometheus selects ServiceMonitors by:
+
+```yaml
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels: { release: kube-prometheus-stack }
+```
+
+Set `metrics.serviceMonitor.namespace` if your Prometheus watches only one namespace. `interval` (30 s), `scrapeTimeout` (10 s), `relabelings` and `metricRelabelings` are also values. The ServiceMonitor needs the Operator's CRDs. The Kustomize component `components/monitoring` has the same ServiceMonitor.
+
+### Without the Prometheus Operator
+
+Scrape the endpoints of the Service `<release>-metrics`, port `metrics`, path `/metrics`. Or discover the pods themselves, by the container port named `metrics`. For a plain Prometheus or Grafana Alloy:
+
+```yaml
+scrape_configs:
+  - job_name: pi-durable-platform
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: { names: [pi-durable-platform] }
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: pi-durable-platform
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: metrics
+        action: keep
+```
+
+Nothing is annotated for annotation-based discovery.
+
+### Several replicas
+
+Each replica exports its own metrics. **Sum** counters and rates across replicas. A few gauges describe the cluster, not the process, so every replica reports the same value: use `max` for `pdp_agents`, and for `pdp_agents_running` with a cluster launcher (`kubernetes` or `agent-sandbox`), which counts the cluster's pods. See [Running several replicas](/docs/operate/replicas).
+
+## What is exported
+
+Every name starts with `pdp_`. Histograms add `_bucket`, `_sum` and `_count`. The Go runtime and process collectors (`go_*`, `process_*`) are there too.
+
+| Metric | Labels | Meaning |
+|---|---|---|
+| `http_requests_total`, `http_request_duration_seconds`, `http_requests_in_flight` | `listener` (`api` or `gateway`), `method`, `route`, `code` (`2xx` and so on; the histogram and the gauge have no `code`) | Every request on both listeners. `route` is the route pattern, such as `/v1/agents/{agentId}`, never the path. Requests that match no route (the web app's files, 404s) are `unmatched` |
+| `agent_wakes_total`, `agent_wake_duration_seconds` | `launcher`, `start`, `result` | Every call that makes sure an agent's runtime is up. `start` is `running` (nothing to start), `cold` (started or resumed), `warm` (a standby runtime from the warm pool was adopted), `pool_miss` (the pool was empty, so one was created) or `unknown` (failed before saying). `result` is `ok`, `error`, `timeout` or `canceled` |
+| `warm_pool_claims_total` | `result` (`hit` or `miss`) | Claims on the Agent Sandbox warm pool |
+| `agents_running` | none | Agents with a runtime, as the idle reaper last saw them (every 30 s) |
+| `agents` | `enabled` | Agents that exist (counted every 30 s) |
+| `agent_hibernations_total` | `reason` (`idle` or `request`), `result` | `idle` is the reaper. `request` is an explicit hibernate, or a change that restarts the agent |
+| `model_proxy_requests_total`, `model_proxy_request_duration_seconds` | `provider_kind`, `model`, `code` | The model proxy. The duration is the whole reply, streams included |
+| `model_proxy_tokens_total` | `provider_kind`, `model`, `direction` (`input`, `output`, `cache_read`, `cache_write`) | The tokens that replies report |
+| `mcp_proxy_requests_total`, `mcp_proxy_request_duration_seconds` | `server`, `code` | The MCP proxy |
+| `mcp_tool_calls_total` | `server`, `result` (`ok`, `error`, `denied`) | Tool calls through the proxy. Tool names are not labels |
+| `oauth_tokens_issued_total` | `grant_type` | Token pairs issued to apps |
+| `oauth_token_errors_total` | `error` | Refused token requests, by OAuth error code |
+| `oauth_refresh_reuse_revocations_total` | none | Connections ended because a retired refresh token was used again |
+| `signins_total` | `method` (`oidc` or `dev`), `result`, `reason` | Sign-ins |
+| `rate_limit_rejections_total` | `limiter` | Requests refused with `429`, by limiter |
+| `thread_event_subscribers` | none | Open thread event streams on this replica |
+| `background_runs_total`, `background_run_duration_seconds`, `background_last_success_timestamp_seconds` | `loop`, `result` | The background loops: `reaper`, `cleanup`, `rate_cleanup`, `group_recheck`, `thread_events` (only listeners that failed) and `agent_count` |
+| `db_pool_*` | `pool` (`platform` or `agents`) | Connection pool statistics, read at each scrape: `acquired_connections`, `idle_connections`, `total_connections`, `max_connections`, and the counters `acquires_total`, `acquires_waited_total`, `acquire_wait_seconds_total` and `canceled_acquires_total` |
+| `build_info` | `version`, `commit`, `go_version` | Always 1 |
+
+### What the labels never contain
+
+A label holds only a small set of values that the platform defines: route patterns, status classes, methods, launcher modes, provider kinds and loop names. **Nothing that identifies a person, a team, an agent, a thread or a URL is ever a label**, and no label value comes from a request. The platform's tests throw hundreds of different IDs and paths at the API and check that the number of series stays small.
+
+Two labels are chosen by platform admins, so they are bounded (at most 64 values, plain characters, else `other`): `model`, the upstream name of a **platform** model, and `server`, the slug of a **platform** MCP server. A team's own models are `team`, a team's own MCP servers are `team`, and servers that an app gave a thread are `app`. Per-team usage is in the [usage reports](/docs/administer/usage), not in metrics.
+
+## The Grafana dashboard
+
+The product's `deploy/grafana/pi-durable-platform.json` is a dashboard (uid `pdp-overview`) built from these metrics. It has rows for:
+
+- an overview: agents running and existing, request rate, the 5xx ratio, replicas and the build;
+- agent wakes: latency (cold, warm and pool miss), warm pool hit ratio, failures and hibernations;
+- HTTP on both listeners: rate, errors, latency by route, requests in flight and rate limiting;
+- the model proxy and the MCP proxy: rate, errors, latency, tokens and tool calls;
+- sign-in and OAuth;
+- the reaper and the other background loops;
+- the database pools and the process (memory, goroutines, CPU).
+
+Its data source is a variable: pick your Prometheus or Mimir. There are two ways to get it into Grafana:
+
+- **Import** the JSON file in Grafana.
+- **A ConfigMap for Grafana's dashboard sidecar.** Set `metrics.dashboard.enabled: true`: the chart creates a ConfigMap labelled `grafana_dashboard: "1"`, which the sidecar loads. `metrics.dashboard.namespace` and `metrics.dashboard.labels` change where it goes and how it is labelled, and `metrics.dashboard.annotations` can set the folder, for example `grafana_folder: Pi Durable Platform`. Kustomize's `components/monitoring` has the same ConfigMap.
+
+## Example alerts
+
+`deploy/grafana/alerts.yaml` is an example `PrometheusRule`. Copy it, change the namespace and the labels your Prometheus selects rules by, and tune the thresholds to your load. The alerts are:
+
+| Alert | Fires when |
+|---|---|
+| `PdpMetricsMissing` | No `pdp_build_info` for 10 minutes: nothing scrapes the platform, or no replica is up (critical) |
+| `PdpAgentWakeFailures` | More than 10% of the calls that make sure an agent has a runtime fail or time out |
+| `PdpAgentWakesSlow` | The 95th percentile of starting an agent's runtime is over 30 seconds |
+| `PdpWarmPoolMissing` | More than half the claims on the warm pool had to create a runtime (info) |
+| `PdpHighServerErrorRatio` | More than 5% of API requests answer 5xx (critical) |
+| `PdpModelProxyErrors` | More than 10% of model proxy requests end in 5xx |
+| `PdpDatabasePoolExhausted` | A connection pool is over 90% in use and checkouts are waiting |
+| `PdpBackgroundLoopStalled` | The reaper or the agent count has not completed a run for 5 minutes, or the clean-up for an hour |
+| `PdpIdleAgentsNotReaped` | More than 20 agents have a runtime and the reaper has hibernated none for 6 hours |
+| `PdpRefreshTokenReuse` | Several connections were ended in an hour because a retired refresh token came back (info) |
+| `PdpRateLimiting` | A limiter has refused more than one request per second for 15 minutes (info) |
+
+For a Mimir or Prometheus rule file that is not an Operator `PrometheusRule`, take the rules out of `spec.groups`:
+
+```sh
+yq '{"groups": .spec.groups}' deploy/grafana/alerts.yaml
+```
+
+The product's tests check every expression in the dashboard and in the alerts against the metrics and labels the platform exports.
+
+## Traces
+
+Tracing is **off** unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set. It is the base URL of an OpenTelemetry collector that takes **OTLP over HTTP**, normally port 4318, for example `http://otel-collector.observability.svc:4318`. gRPC isn't supported.
+
+| Setting | Default | |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none: tracing is off | The collector's base URL, `http` or `https` |
+| `OTEL_SERVICE_NAME` | `pi-durable-platform` | The `service.name` of the spans |
+| `OTEL_TRACES_SAMPLER_ARG` | `1` | The share of new traces kept, from 0 to 1. A request that arrives with a sampling decision keeps it |
+
+The exporter also honours the standard OpenTelemetry variables for its headers, timeout, compression and TLS certificates (`OTEL_EXPORTER_OTLP_HEADERS` and the others). Set those in the process environment, and take authentication headers from a Secret, not from a file.
+
+With the chart:
+
+```yaml
+tracing:
+  otlpEndpoint: http://tempo.observability.svc:4318
+  serviceName: ""        # optional
+  sampleRatio: ""        # optional, 0 to 1, for example 0.1
+networkPolicy:
+  egress:
+    tracing:
+      to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } }
+          podSelector: { matchLabels: { app.kubernetes.io/name: tempo } }
+      ports: [4318]
+```
+
+`networkPolicy.egress.tracing` is needed when the collector is in the cluster or on a private address: the platform's pods may otherwise reach only public HTTPS. Give the exporter its authentication headers with `extraEnv` (`OTEL_EXPORTER_OTLP_HEADERS`, from a Secret).
+
+### The spans
+
+- A **server span** for every request on the API and the gateway, named `METHOD route-pattern` (the pattern the metrics use, never the path), with the route, the status code and the request ID. The access log carries `trace_id` when there is a trace, so you can go from a log line to its trace.
+- `agent.wake` (the launcher, how it started, the result and the agent's ID) and `agent.runtime_request` (the relay to the agent's runtime) below the request that woke the agent. The request to the runtime, and the warm pool's activation call, carry a `traceparent` header.
+- `model.upstream` (the provider kind, the platform model's name, the status and the tokens) and `mcp.upstream` (the server, and the number and names of the tools called) below the gateway request. The trace context is sent on to the provider or the MCP server.
+
+A request that arrives with a `traceparent` header is continued. `baggage` is neither read nor sent.
+
+A span never holds message content, request or response bodies, headers, URLs, keys, tokens or a person's identity. Errors are reduced to a fixed reason. A test checks all the spans of a conversation for the secrets and prompts it used.
+
+### What tracing doesn't do yet
+
+- **The agent's runtime doesn't read `traceparent`.** There are no spans from inside the runtime, so a trace ends at the relay to it.
+- **Agents' own calls start new traces.** The model and MCP requests an agent makes to the gateway don't carry the trace of the conversation, because the runtime doesn't forward it. You see them as traces of their own.
+
+## See also
+
+- [Configuration](/docs/operate/configuration#observability) for the settings.
+- [Install on Kubernetes](/docs/operate/kubernetes) for the chart's values.
+- [Doctor and health checks](/docs/operate/doctor-and-health) for the probes and logs.

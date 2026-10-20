@@ -1,6 +1,6 @@
 ---
 title: Running Pi Durable Platform
-description: "What a Pi Durable Platform install is made of, what you need before you start, the ports, and which install paths exist in v0.1.2."
+description: "What a Pi Durable Platform install is made of, what you need before you start, the ports, and how to install it."
 ---
 
 Pi Durable Platform is one Go binary with the web app embedded, plus an agent runtime image. You run the platform; the platform starts a runtime for each agent while it's used.
@@ -11,6 +11,7 @@ Pi Durable Platform is one Go binary with the web app embedded, plus an agent ru
 |---|---|---|
 | **The platform** (`ghcr.io/ncecere/pi-durable-platform:v0.1.2`) | Web app, API, OAuth endpoints, background loops (hibernation, clean-up, thread events) | `8098` (`LISTEN_ADDR`): put your HTTPS ingress in front |
 | **The agent gateway** (the same process) | The model proxy, the MCP proxy, and usage and thread reports, for agents only | `8099` (`AGENTS_GATEWAY_ADDR`): never expose it outside the cluster |
+| **The metrics port** (the same process; optional) | `GET /metrics` for Prometheus, and nothing else, with no authentication | Off unless `METRICS_ADDR` is set; the chart sets `:9090`. Never expose it: see [Metrics and tracing](/docs/operate/metrics-and-tracing) |
 | **Agent runtimes** (`ghcr.io/ncecere/pi-durable-platform-runtime:v0.1.2`) | One Node.js process with Pi's durable package per running agent; started by the platform | `4100`, reached by the platform only |
 | **PostgreSQL**, platform database (`DATABASE_URL`) | People, teams, templates, agents' records, keys, audit log, usage | |
 | **PostgreSQL**, agents database (`AGENTS_DATABASE_URL`) | One schema and role per agent: its conversations | |
@@ -19,7 +20,7 @@ Both images are multi-arch (linux/amd64 and linux/arm64), run as non-root users 
 
 ## Requirements
 
-- **Kubernetes**, for the agent runtimes. The `kubernetes` launcher needs nothing else; the `agent-sandbox` launcher needs [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) installed.
+- **Kubernetes**, for the agent runtimes: 1.27 or newer for the Helm chart, with a network plugin that enforces NetworkPolicy. The `kubernetes` launcher needs nothing else; the `agent-sandbox` launcher needs [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) installed.
 - **PostgreSQL 17** (the version the platform is developed and tested with), with two databases. They can be on one server. See [Databases](/docs/operate/databases).
 - **An OIDC identity provider** for sign-in. See [OIDC sign-in](/docs/operate/oidc).
 - **HTTPS**: `APP_URL` must be `https` unless it's a loopback address.
@@ -36,20 +37,29 @@ Both images are multi-arch (linux/amd64 and linux/arm64), run as non-root users 
 | `agent-sandbox` | a Sandbox `agent-<id>` around the same pod | suspends it | resumes it | production with Agent Sandbox ([Agent Sandbox](/docs/operate/agent-sandbox)) |
 | `agent-sandbox` with a warm pool | a standby runtime claimed from a `SandboxWarmPool` | releases the claim | claims and activates one | faster wakes ([Agent Sandbox](/docs/operate/agent-sandbox#warm-pool)) |
 
-## Install paths in v0.1.2
+## Install paths
 
-The repository ships the images and their Dockerfiles, but **no Kubernetes manifests, Helm chart or production Compose file**. Its `compose.yaml` only starts a development PostgreSQL. [Install on Kubernetes](/docs/operate/kubernetes) lists what to create, with example manifests to adapt. To try it on your own machine, see [Try it locally](/docs/get-started/try-it-locally). A Kustomize base and a Helm chart, with RBAC and NetworkPolicies, are the first item of v0.2 on the [roadmap](https://github.com/ncecere/pi-durable-platform/blob/main/docs/roadmap.md).
+| Path | Use it when |
+|---|---|
+| [Helm chart](/docs/operate/kubernetes) (`oci://ghcr.io/ncecere/charts/pi-durable-platform`, signed) | You want values instead of patches. It deploys the platform, the agents namespace, the platform's Role and the NetworkPolicies that isolate agents |
+| [Kustomize](/docs/operate/kustomize): a base, overlays for each launcher, components and examples | Your cluster is managed with Kustomize, or with Flux or Argo CD on plain manifests. It is generated from the chart |
+| [The objects by hand](/docs/operate/manual-manifests) | You want to understand what the chart creates, or build your own |
+| [Try it locally](/docs/get-started/try-it-locally) | You want to try it on your own machine |
+
+Both the chart and the base need a cluster whose network plugin enforces NetworkPolicy, PostgreSQL 17, and an OIDC client. They don't install PostgreSQL, the ingress controller or Agent Sandbox. The repository's `compose.yaml` only starts a development PostgreSQL; there is no production Compose file.
 
 ## Commands
 
 ```text
 pi-durable-platform serve                 the API, the web app and background loops (the image's default)
 pi-durable-platform migrate               apply database migrations and exit
-pi-durable-platform doctor                check the configuration, PostgreSQL, migrations and the agents database
+pi-durable-platform doctor                check the configuration, PostgreSQL, migrations, the keys and the agents database
 pi-durable-platform prune-agent-storage   remove agent storage no agent owns (--dry-run)
+pi-durable-platform prune-roles           drop agent database roles no agent owns (--dry-run)
+pi-durable-platform rekey                 re-seal every stored secret under the current ENCRYPTION_KEY (--dry-run, --batch)
 pi-durable-platform version               print the version
 ```
 
-Run **one replica** of the platform in v0.1.2; see [Install on Kubernetes](/docs/operate/kubernetes#6-the-deployment-and-service).
+The platform runs as one replica, or as several behind one Service: two is the supported setup for staying up through node drains and rollouts. See [Running several replicas](/docs/operate/replicas) and [Install on Kubernetes](/docs/operate/kubernetes). To see what it is doing, see [Metrics and tracing](/docs/operate/metrics-and-tracing).
 
 Configuration is environment variables, optionally over a YAML file: see [Configuration](/docs/operate/configuration).

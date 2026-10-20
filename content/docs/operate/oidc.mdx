@@ -1,6 +1,6 @@
 ---
 title: OIDC sign-in
-description: "Connecting Pi Durable Platform to your identity provider: the client, verified emails, email domains, groups and OIDC_ALLOWED_GROUPS, the first admin, and what sign-in does and doesn't re-check."
+description: "Connecting Pi Durable Platform to your identity provider: the client, verified emails, email domains, groups and OIDC_ALLOWED_GROUPS, re-checking groups while people are signed in, and the first admin."
 ---
 
 Pi Durable Platform signs people in with any OpenID Connect provider. People never get passwords from the platform itself.
@@ -10,7 +10,7 @@ Pi Durable Platform signs people in with any OpenID Connect provider. People nev
 In your identity provider, create a confidential web client:
 
 - **Redirect URI**: `<APP_URL>/auth/callback`, for example `https://agents.example.com/auth/callback`.
-- **Scopes**: `openid`, `profile` and `email` (the default `OIDC_SCOPES`), plus whatever makes your provider send groups.
+- **Scopes**: `openid`, `profile` and `email` (the default `OIDC_SCOPES`), plus whatever makes your provider send groups. To [re-check groups](#re-checking-groups) while people are signed in, also `offline_access`, and allow that scope for this client.
 
 Then set:
 
@@ -41,9 +41,63 @@ OIDC_ALLOWED_GROUPS=agents-users,agents-admins
 
 Only people in at least one of these groups may sign in; others see "Your account is not in a group allowed to use this platform". The bootstrap admin may always sign in, so the platform can't be locked out. It needs `OIDC_GROUPS_CLAIM`. Groups don't map to roles: platform roles are set in **Admin › Users**, team roles by each team.
 
-<Callout type="warn" title="Groups are checked at sign-in">
-Group membership, email domain and verified email are checked when a person signs in. Removing someone from a group doesn't end their current browser session (up to `SESSION_TTL`, 12 hours by default), their personal API keys or their connected apps. To cut someone off at once, **Suspend…** them in **Admin › Users**: that ends their sessions and stops their keys and apps at the next request.
-</Callout>
+Group membership is also checked **again while people are signed in**: see the next section. Email domain and verified email are checked at sign-in only.
+
+## Re-checking groups
+
+With `OIDC_ALLOWED_GROUPS`, the platform keeps asking your identity provider whether each person is still in an allowed group. Removing someone from the group then ends their access within a check interval, not at their next sign-in. The platform has no credentials of its own at your provider, and uses no SCIM: it uses the **refresh token** the provider gave the person at sign-in.
+
+### What your provider must provide
+
+1. **A refresh token for this client.** The platform asks for the `offline_access` scope, and **your provider must issue refresh tokens for it to this client**:
+
+   ```sh
+   OIDC_SCOPES=openid,profile,email,offline_access
+   ```
+
+   Some providers need the scope enabled as well: for example, a scope mapping for `offline_access` attached to the provider that serves this client. Check your provider's documentation. Where you set `OIDC_SCOPES` yourself (the platform on its own, or Kustomize: the production example sets it), add `offline_access` there. **The Helm chart adds it for you** when `oidc.allowedGroups` is set, unless you turn the re-check off with `oidc.groupRecheckInterval: "0"` (a string).
+2. **The groups claim** (`OIDC_GROUPS_CLAIM`) in the ID token that a refresh returns, or else in the userinfo answer.
+
+With `OIDC_ALLOWED_GROUPS` set but no `offline_access`, the platform logs a warning at start: without a refresh token, groups apply at sign-in only.
+
+### How it works
+
+At sign-in the platform keeps the person's refresh token, sealed with `ENCRYPTION_KEY`. Every `OIDC_GROUP_RECHECK_INTERVAL` (15 minutes by default) it exchanges the token at your provider's token endpoint for fresh claims, takes the groups from them, and applies the same rule as at sign-in. If your provider rotates the refresh token, the new one replaces the kept one. It checks people who were recently active: a sign-in, a live session, or an API key or connected app used in the last 30 days. A removal takes effect within the interval plus up to a minute. Set `OIDC_GROUP_RECHECK_INTERVAL=0` to turn the re-check off (with the chart, `oidc.groupRecheckInterval: "0"`; `oidc.groupRecheckGrace` sets the grace period; both are strings).
+
+| The provider's answer | What happens |
+|---|---|
+| Lists an allowed group | Access continues, and the person's stored groups are updated |
+| Lists none | Access ends: **no longer in a group allowed** |
+| Refuses the refresh token (the person was disabled, or the grant was revoked or expired) | Access ends: **the provider no longer vouches for them** |
+| Can't be asked: it is unreachable, answers with an error, or its answer has no groups claim | Nothing changes, and the platform logs a warning. When `OIDC_GROUP_RECHECK_GRACE` (24 hours by default) has passed since the provider last vouched for the person, access ends: **the provider could not confirm their groups** |
+
+So a provider outage costs nobody access for a day, and a person the provider stops answering for loses it after one. The grace period is at least the interval.
+
+### When access ends
+
+For a person whose access ends, the platform:
+
+- ends their **browser sessions**;
+- **disconnects their connected apps**, which must connect again;
+- forgets the stored refresh token;
+- makes their **personal API keys** stop working. They aren't revoked, and work again when access is restored.
+
+Their data, team memberships and agents stay. A conversation stream they already had open isn't closed, but every new request is refused with `403 group_denied`.
+
+This is separate from **Suspend…**: a suspension is an admin's decision, and only an admin changes it. Group access and suspension never overwrite each other, and a person is inactive while either applies. In **Admin › Users**, the person's **Status** shows a **Group access ended** badge, with the reason on hover, and their page says why. Their entry in the audit log reads **Ended access: no longer in an allowed group**, with the reason and how many connected apps were disconnected; see [People and teams](/docs/administer/people-and-teams#users).
+
+### Coming back
+
+Signing in applies the rule again. When it passes, the block is lifted (**Restored access: back in an allowed group** in the audit log) and API keys work again. Connected apps must be connected again. A person still outside the group can't sign in (`403 group_denied`) and nothing changes. Removing `OIDC_ALLOWED_GROUPS` lifts every block at the next start.
+
+### What isn't covered
+
+- The bootstrap admin and development personas are never re-checked.
+- People who signed in before the check existed, or when your provider issued no refresh token, have nothing to check with: their groups apply when they next sign in.
+- A provider that lets refresh tokens expire for good (an absolute lifetime) ends access with the "no longer vouches" reason when that happens. The person signs in again.
+- The stored refresh tokens are sealed with `ENCRYPTION_KEY`. `rekey` and `doctor` cover them: after a [key rotation](/docs/operate/key-rotation#what-rekey-does-and-doesnt-do), run `rekey` before you drop the previous key, and group re-checks keep working.
+
+To cut someone off at once, whatever the interval, **Suspend…** them in **Admin › Users**: that ends their sessions and stops their keys and apps at the next request.
 
 ## The first platform admin
 

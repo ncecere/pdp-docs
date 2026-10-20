@@ -3,7 +3,7 @@ title: Threads, messages and events
 description: "Talking to a Pi Durable Platform agent from your app: listing agents and threads, sending messages, following a conversation over server-sent events, the conversation view, stopping, renaming, deleting and hibernating."
 ---
 
-A conversation with a Pi Durable Platform agent is a **thread** named by your app. You send messages to it and follow it as **server-sent events**. Messages are accepted at once (`202`); the reply arrives on the thread.
+A conversation with a Pi Durable Platform agent is a **thread**. You start one, send messages to it and follow it as **server-sent events**. Messages are accepted at once (`202`); the reply arrives on the thread.
 
 ## Find the agent
 
@@ -15,9 +15,32 @@ GET /v1/agents/{agentId}            # one
 
 Each agent has its `teamId`, `teamSlug` and `teamName`, its template and version, its model, `enabled`, and `running` (whether its runtime is up now). `GET /v1/agents?includeManaged=true` also lists service-managed agents to a team's owners and admins, who can see but not use them; don't pass it with a person's token.
 
-## Threads
+## Start a thread
 
-Your app chooses each thread's ID: 1 to 64 letters, digits, dashes or underscores. **Use random IDs** (a UUID without braces works): thread IDs are per agent, and anyone who may use the agent could otherwise guess or pre-empt one.
+Ask the platform for a thread, and it chooses the ID:
+
+```sh
+curl -X POST https://agents.example.com/v1/agents/$AGENT/threads \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"visibility": "private", "title": "Release questions"}'
+```
+
+Both fields are optional, and so is the body. The answer is `201` with the thread and a `Location` header with its path. The ID is random and unguessable: use it as `{threadId}` below, and send the first message to `…/threads/{threadId}/messages`.
+
+| Field | |
+|---|---|
+| `visibility` | `shared` (the default) or `private`. It is fixed from now on: see [Private threads](/docs/build/private-threads) |
+| `title` | Up to 200 characters. The default is "New chat", which the first message's first line replaces while it is still the default |
+
+Anyone who may use the agent may start a thread, as for sending a message. An agent that is turned off answers `409 agent_disabled`. Until its first message, a thread is listed and announced to its creator only (anyone who may use the agent can still use a shared one by its ID). A thread that nobody sends to is removed after 30 days.
+
+**Use this rather than choosing IDs yourself.** Thread IDs are per agent, and a platform-chosen ID can't be guessed, so nobody else can start the thread or join it before you.
+
+### Choosing the ID yourself
+
+Your app may still choose a thread's ID: 1 to 64 letters, digits, dashes or underscores. The first message under an ID that has no thread starts that thread, as before. So does setting its [MCP servers](/docs/build/thread-mcp-servers). But **whoever uses an ID first starts that thread**: if the ID is guessable, someone else who may use the agent can start it before you. For a shared thread, anyone who may use the agent and learns the ID can join it. If you do choose IDs, use random ones (a UUID without braces works).
+
+## List, read, rename and delete
 
 ```sh
 GET    /v1/agents/{agentId}/threads                 # list, most recently used first
@@ -40,10 +63,10 @@ curl -X POST https://agents.example.com/v1/agents/$AGENT/threads/$THREAD/message
 |---|---|
 | `text` | Required, up to 32,000 characters. Text only: no files or images. |
 | `requestId` | Idempotency key: a repeated one isn't submitted again. Send one with every message and reuse it on retries. |
-| `visibility` | `shared` (default) or `private`, chosen by the thread's **first** message. See [Private threads](/docs/build/private-threads). |
+| `visibility` | `shared` (default) or `private`, chosen when the thread starts: by `POST …/threads`, by its **first** message, or by setting its MCP servers. See [Private threads](/docs/build/private-threads). |
 | `mcpServers` | The MCP servers your user enabled for this thread. See [Thread MCP servers](/docs/build/thread-mcp-servers). |
 
-The answer is `202` with a `submissionId`. The first message creates the thread. A message sent while the agent is replying waits and runs after the current reply; it doesn't interrupt it. Don't set an author: the platform sets it from your credential.
+The answer is `202` with a `submissionId`. The first message to an ID with no thread starts it (a thread from `POST …/threads` already exists, and the message ends its reservation). A message sent while the agent is replying waits and runs after the current reply; it doesn't interrupt it. Don't set an author: the platform sets it from your credential.
 
 ## Follow the conversation
 

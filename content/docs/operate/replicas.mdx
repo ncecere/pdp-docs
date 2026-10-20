@@ -1,0 +1,84 @@
+---
+title: Running several replicas
+description: "Run Pi Durable Platform as several replicas behind one Service: what stays up through node drains and rollouts, how replicas share work, how to turn it on with the chart or Kustomize, and what is still per replica."
+---
+
+Pi Durable Platform can run as **several replicas** behind one Service. **Two replicas** is the supported and tested setup: it keeps the platform up through node drains and rollouts. One replica is still the default.
+
+There is no leader, no sticky session and no shared disk. Everything that decides something is in PostgreSQL, in the Kubernetes API or in the agent's own runtime. What a replica keeps in memory is a cache or a hint that saves calls.
+
+## Turn it on
+
+With the Helm chart:
+
+```yaml
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+```
+
+With Kustomize, add the components `components/replicas` and `components/pod-disruption-budget` to your kustomization. `examples/production` already does.
+
+With more than one replica:
+
+- **Updates roll one pod at a time, with none missing** (`maxSurge: 1`, `maxUnavailable: 0`), so there is always a ready replica. With one replica the pod is replaced instead, with a short outage.
+- **Pods are spread over nodes and zones.** The chart prefers a different node for each replica (pod anti-affinity) and spreads them across zones (a topology spread constraint that never blocks scheduling), so a small cluster still schedules them. Set `affinity` or `topologySpreadConstraints` to choose differently. Yours replace the defaults.
+- **A PodDisruptionBudget** makes a node drain evict one replica at a time. It is off by default because with one replica a budget of `minAvailable: 1` would block drains. The chart's budget is `minAvailable: 1`. The Kustomize component's is `maxUnavailable: 1`; with two replicas both leave one running.
+- **Shutdown has time to finish.** On SIGTERM a replica fails its readiness probe first, so the Service stops sending it new requests. It waits `SHUTDOWN_DELAY` (5 s), then gives requests and event streams `SHUTDOWN_TIMEOUT` (60 s). The pod's `terminationGracePeriodSeconds` must cover both: the chart's default is **75**. If you raise either setting, raise it too.
+
+Use the `kubernetes` or `agent-sandbox` launcher. The `local` launcher runs agents as children of one process and can't be shared.
+
+## What the replicas share
+
+| What | How |
+|---|---|
+| Sessions, sign-in state and OAuth Connect state, and rate limits | In PostgreSQL. A sign-in that starts on one replica can end on another, and a limit is counted once for all |
+| Thread records, status and runtime reports | In PostgreSQL. The agents' gateway Service picks any replica |
+| Thread events | A replica tells the others through PostgreSQL (`LISTEN` and `NOTIFY`), and each one sends the change to its own event streams. A browser on one replica hears changes made through another |
+| Group re-checks | Each person is claimed by one replica at a time, so each is asked about once per interval |
+| Clean-up of sessions, codes, tokens and threads | Every replica runs it. The deletes are safe to repeat |
+| Which agents are running | The Kubernetes API, for the `kubernetes` and `agent-sandbox` launchers |
+
+### Whether an agent is idle
+
+An agent hibernates after `AGENTS_IDLE_TIMEOUT` with no reply in progress, no open event stream and no request. With several replicas, no one replica sees all of that, so **the agent's runtime says so itself**: its `/status` reports its busy threads, its open event streams (`openStreams`) and the time of its last activity. Every request and every stream goes through the runtime, whichever replica sent it. A replica that has seen nothing of an agent can't hibernate it by mistake.
+
+One replica reaps at a time. Each pass takes a PostgreSQL advisory lock, and a replica that finds it taken skips the pass. That saves duplicate status calls; correctness doesn't depend on it.
+
+An event stream whose replica died is closed by the runtime when its connection fails (the runtime writes a keep-alive every 15 seconds).
+
+### Starting an agent
+
+When a request needs an agent that isn't running, the replica takes a PostgreSQL advisory lock for that agent before it starts the runtime, and checks again once it has the lock. Two replicas waking one agent therefore start one runtime: the second finds it. An agent that is already running costs no lock. A replica waits for the lock for at most three minutes, then fails the request.
+
+Starting also happens once at start-up: creating and hardening the agents database now runs one replica at a time, so replicas that start together no longer race.
+
+The launchers' own safeguard stays: an agent's ownership record in its own schema refuses a second runtime for one agent, whatever starts it.
+
+## What is still per replica
+
+- **Caches.** Each replica caches OIDC discovery, apps' client metadata documents and logos, and the connections to teams' providers and MCP servers, on its own. A consent page loads an app's logo in a second request, which may reach a replica that hasn't cached it yet: the page then shows the app's initials for that request. After a settings change, the other replicas close their cached connections to teams' providers and MCP servers within 30 seconds.
+- **The soft limit of running agents** in a personal workspace (`too_many_running`) is checked, then the agent wakes. Wakes at the same moment on different replicas can exceed it by one, as they could on one replica.
+- **Old runtimes.** An agent started before you upgraded runs the old runtime image, which doesn't report `openStreams`. The reaper then goes by the streams its own replica has seen, as in v0.1, until that agent next restarts.
+- **Event streams end with their replica.** A shutdown closes them, and clients reconnect to another replica.
+- **Thread events can lag.** If a replica's listening connection to PostgreSQL drops, it misses the changes announced until it reconnects (two seconds), as one replica would.
+- **A lost lock holder.** If a network partition leaves a replica holding the start lock, the others stop waiting after three minutes and fail their requests with an error. They don't wait for PostgreSQL to notice the dead connection.
+
+## PostgreSQL connections
+
+Connections grow with the replicas. Each replica holds:
+
+- a pool for the platform database (at least four connections) and one for the agents database (up to four);
+- one connection that listens for thread events;
+- a short-lived connection for each advisory lock it takes (starting an agent, the reaper's turn).
+
+Behind a connection pooler, the listening and lock connections must be **session** connections: transaction pooling breaks `LISTEN` and advisory locks. Agent runtimes already need session connections (see [Databases](/docs/operate/databases)).
+
+## Upgrading with several replicas
+
+A rolling upgrade has both versions running for a while. Migration 17 changes how a thread's MCP servers are stored, and requests that set MCP servers on a thread that has no record fail against the new schema until every replica runs the new version. See [Upgrading to v0.2](/docs/operate/upgrades#upgrading-to-v02).
+
+## Check it
+
+The repository's smoke test installs the chart with two replicas on kind and checks that a session, an agent and its conversation are shared. The [metrics](/docs/operate/metrics-and-tracing) are per replica: sum the counters, and use `max` for the gauges that describe the cluster.

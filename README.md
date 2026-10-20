@@ -72,7 +72,7 @@ The sections: **Get started**, **Use agents**, **Teams**, **Administer**, **Oper
 
 ### API reference
 
-`npm run sync:openapi` copies the product's `api/openapi.yaml` into `openapi/pi-durable-platform.yaml`. Review the diff and rebuild: there is one page per operation, grouped by the operation's first tag (sidebar labels in `lib/openapi.ts`). Once the release is tagged, sync from the tag (`npm run sync:openapi -- v0.1.2`).
+`npm run sync:openapi` copies the product's `api/openapi.yaml` into `openapi/pi-durable-platform.yaml`. Review the diff and rebuild: there is one page per operation, grouped by the operation's first tag (sidebar labels in `lib/openapi.ts`). Once the release is tagged, sync from the tag (`npm run sync:openapi -- v0.1.2`). On the `v0.2` branch the copy comes from the product checkout's `main`, which is ahead of the tagged release; at the v0.2.0 release, sync it again from the tag.
 
 ### Brand
 

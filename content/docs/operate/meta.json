@@ -2,5 +2,5 @@
   "title": "Operate",
   "description": "Installing, configuring and running Pi Durable Platform",
   "root": true,
-  "pages": ["index", "kubernetes", "agent-sandbox", "configuration", "oidc", "databases", "network-isolation", "backups", "upgrades", "doctor-and-health", "security"]
+  "pages": ["index", "kubernetes", "kustomize", "manual-manifests", "agent-sandbox", "configuration", "oidc", "databases", "network-isolation", "replicas", "metrics-and-tracing", "backups", "key-rotation", "upgrades", "doctor-and-health", "security"]
 }

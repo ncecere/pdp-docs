@@ -9,7 +9,7 @@ Pi Durable Platform keeps everything in PostgreSQL. Nothing on the platform's or
 
 1. **The platform database** (`DATABASE_URL`): people, teams, templates, agents' records, keys, settings, usage and the audit log.
 2. **The agents database** (`AGENTS_DATABASE_URL`): every agent's conversations, one schema each. Include roles: each agent connects with its own role (`pg_dumpall --roles-only`, or your provider's equivalent).
-3. **`ENCRYPTION_KEY`** and **`API_KEY_PEPPER`**, kept in your secrets store. Without `ENCRYPTION_KEY`, stored provider keys and MCP headers can't be decrypted; without `API_KEY_PEPPER`, no API key, service account key or app token matches.
+3. **`ENCRYPTION_KEY`** and **`API_KEY_PEPPER`**, kept in your secrets store. Without `ENCRYPTION_KEY`, stored provider keys and MCP headers can't be decrypted (and keep `ENCRYPTION_KEY_PREVIOUS` for as long as you may restore a backup taken before a [rotation](/docs/operate/key-rotation) finished); without `API_KEY_PEPPER`, no API key, service account key or app token matches.
 
 Use your usual PostgreSQL backups: continuous archiving with point-in-time recovery, or regular `pg_dump`s. Back the two databases up at the same time, so they agree about which agents exist.
 

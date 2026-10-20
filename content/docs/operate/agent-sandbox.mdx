@@ -5,6 +5,8 @@ description: "Run Pi Durable Platform's agents with Kubernetes Agent Sandbox: a 
 
 With `AGENTS_LAUNCHER=agent-sandbox`, Pi Durable Platform runs agents as [Kubernetes Agent Sandbox](https://agent-sandbox.sigs.k8s.io) resources (`agents.x-k8s.io/v1beta1` and `extensions.agents.x-k8s.io/v1beta1`). Install Agent Sandbox and its extensions in your cluster first. Everything else is as in [Install on Kubernetes](/docs/operate/kubernetes); this page covers the differences.
 
+With the Helm chart, set `agents.launcher: agent-sandbox`. The chart then creates the Role below, and with `agentSandbox.warmPool.enabled` (the default for this launcher) the SandboxTemplate and the SandboxWarmPool as well, `agentSandbox.warmPool.size` runtimes large. Set `agentSandbox.warmPool.enabled: false` for a Sandbox per agent. The Kustomize overlays are `overlays/agent-sandbox` and `overlays/agent-sandbox-cold`. The text below describes the objects, whoever creates them.
+
 There are two modes.
 
 ## A Sandbox per agent
@@ -20,7 +22,7 @@ The platform needs, in the agents' namespace:
 rules:
   - apiGroups: [agents.x-k8s.io]
     resources: [sandboxes]
-    verbs: [get, list, create, patch, delete]
+    verbs: [get, list, watch, create, patch, delete]
   - apiGroups: [""]
     resources: [secrets]
     verbs: [get, create, update, delete]
@@ -60,13 +62,15 @@ Set `AGENTS_SANDBOX_WARM_POOL` to the name of a `SandboxWarmPool` you create in 
 
 While a previous runtime is still letting go of the agent, activation answers `409 owned_elsewhere` and the platform retries. A runtime that restarts comes back in standby and is activated again on the next request.
 
+To size the pool, watch `pdp_warm_pool_claims_total` (a `hit` when a standby runtime was claimed, a `miss` when the pool was empty) and `pdp_agent_wake_duration_seconds`: see [Metrics and tracing](/docs/operate/metrics-and-tracing). With several platform replicas, an agent still gets one claim: starting it is serialised across replicas ([Running several replicas](/docs/operate/replicas#starting-an-agent)).
+
 The platform needs, in the agents' namespace:
 
 ```yaml
 rules:
   - apiGroups: [extensions.agents.x-k8s.io]
     resources: [sandboxclaims]
-    verbs: [get, list, create, delete]
+    verbs: [get, list, watch, create, delete]
   - apiGroups: [""]
     resources: [secrets]
     verbs: [get, create, delete]   # the activation Secret
@@ -82,4 +86,4 @@ The activation token reaches only the platform and the pool's pods. Agent pods s
 
 ## Why agents can move
 
-An agent's state is in PostgreSQL in either mode, so a hibernated agent can wake in any runtime on any node. One runtime owns an agent at a time: it holds a PostgreSQL advisory lock on its only connection, and a runtime that loses the connection loses the lock and its ability to write at the same moment. See [Security model](/docs/operate/security).
+An agent's state is in PostgreSQL in either mode, so a hibernated agent can wake in any runtime on any node. One runtime owns an agent at a time: the owner is recorded in a table in the agent's own schema, tied to the database session of its only connection, and a runtime that loses the connection loses its ability to write at the same moment. See [Security model](/docs/operate/security#isolation-between-agents).

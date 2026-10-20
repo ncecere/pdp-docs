@@ -1,0 +1,51 @@
+---
+title: Install with Kustomize
+description: "Install Pi Durable Platform from its Kustomize base and overlays: what each directory is, the Secrets and settings to change, the Agent Sandbox overlays, components, and how the base stays in step with the Helm chart."
+---
+
+The repository's `deploy/kustomize` directory has the same objects as the [Helm chart](/docs/operate/kubernetes), for clusters managed with Kustomize, or with Flux or Argo CD on plain manifests. Read [Install on Kubernetes](/docs/operate/kubernetes) first: what is deployed, the databases and the Secrets are the same.
+
+## What is in it
+
+| Directory | |
+|---|---|
+| `base/` | The platform for the `kubernetes` launcher: both namespaces (with the `restricted` Pod Security level), the ServiceAccount, Role and RoleBinding, a ConfigMap, the Deployment, the two Services and the NetworkPolicies |
+| `overlays/kubernetes/` | One pod per agent: the base as it is |
+| `overlays/agent-sandbox/` | Agent Sandbox with a warm pool: a SandboxTemplate and a SandboxWarmPool, the launcher's settings, and the Role for sandbox claims |
+| `overlays/agent-sandbox-cold/` | Agent Sandbox without a warm pool: a Sandbox per agent |
+| `components/cilium/` | The Kubernetes API egress as a `CiliumNetworkPolicy` (the `kube-apiserver` entity) instead of the base's NetworkPolicy |
+| `components/ingress/` | An Ingress: patch its class and host |
+| `components/replicas/` | Two platform replicas: updates roll one pod at a time with none missing, and the pods are spread over nodes and zones. Written by hand; the parity check compares it with the chart at `replicaCount: 2` |
+| `components/monitoring/` | A ServiceMonitor for the metrics Service (it needs the Prometheus Operator's CRDs), the NetworkPolicy that lets your scraper reach the metrics port, and the Grafana dashboard as a ConfigMap |
+| `components/pod-disruption-budget/`, `components/resourcequota/` | A PodDisruptionBudget (use it with `components/replicas`), and a quota for the agents namespace |
+| `examples/production/` | Agent Sandbox with ingress and TLS, two replicas with a PodDisruptionBudget, a quota, images by digest and single sign-on settings |
+| `examples/cilium/` | The `kubernetes` launcher on Cilium |
+| `examples/monitoring/` | The `kubernetes` launcher with `components/monitoring` |
+
+## Use it
+
+1. **Create the Secrets** in the `pi-durable-platform` namespace, with the names and keys of the chart's [Secret](/docs/operate/kubernetes#1-the-namespace-and-the-secret) (the repository's `deploy/secrets.example.yaml` has them with fake values). If you create them before applying, create the namespace first: `kubectl apply -f base/namespace-platform.yaml`.
+2. **Copy** `examples/production` (or `examples/cilium`) into your own repository, and replace its example values:
+   - the settings in the ConfigMap patch: `APP_URL`, the `OIDC_*` settings, `BOOTSTRAP_ADMIN_SUBJECT`, `TRUSTED_PROXIES` and so on. The ConfigMap holds every non-secret setting, and the pod doesn't restart by itself when it changes: run `kubectl -n pi-durable-platform rollout restart deploy/pi-durable-platform`;
+   - **the Kubernetes API server's address** in the `pi-durable-platform-egress-kube-api` NetworkPolicy. The base ships the placeholder `192.0.2.10/32`; find yours with `kubectl get endpointslices -l kubernetes.io/service-name=kubernetes`. Or use `components/cilium`;
+   - **the images, by digest**, in `images:` (`newTag: v<release>@sha256:…`). The example's `images-config.yaml` makes the transformer reach the SandboxTemplate's container too. With the `kubernetes` launcher the runtime image is `AGENTS_IMAGE` in the ConfigMap;
+   - **PostgreSQL's pod labels** in `pi-durable-platform-egress` and `pi-durable-platform-agents-egress-database`. The base assumes a CloudNativePG cluster `pdp-db` in the platform's namespace: patch the `to` peers for another location;
+   - **who may reach the web port** (`pi-durable-platform-ingress-web`). The base allows every namespace: narrow it to your ingress controller's;
+   - **the scopes**, if you limit sign-in to groups. The production example sets `OIDC_SCOPES` to `openid,profile,email,offline_access`, because the platform needs each person's refresh token to [re-check their groups](/docs/operate/oidc#re-checking-groups). Unlike the chart, Kustomize doesn't add the scope for you, and your identity provider must issue refresh tokens for it.
+3. Render and apply: `kubectl kustomize <your directory>`, then `kubectl apply -k <your directory>`.
+
+The namespace names (`pi-durable-platform` and `pi-durable-agents`) are fixed in the base, because they appear in the NetworkPolicies' selectors: a `namespace:` transformer isn't enough. To use other names, use the Helm chart (`agents.namespace` and `-n`).
+
+The network policies, the CNI requirement and what to check after installing are as for the chart: see [Network policies](/docs/operate/kubernetes#network-policies). `kubectl -n pi-durable-platform exec deploy/pi-durable-platform -- /pi-durable-platform doctor` checks the install.
+
+## Upgrading
+
+Change the images (and the base's version, if you pin the repository), then apply. As with the chart, the platform migrates its database at start, a single replica is replaced rather than rolled (several, with `components/replicas`, roll one at a time with none missing), and the warm pool replaces its standby runtimes at once.
+
+## Replicas and metrics
+
+The base has one replica, which Kubernetes replaces rather than rolls. Add `components/replicas` and `components/pod-disruption-budget` for two: see [Running several replicas](/docs/operate/replicas). The base already serves metrics on port 9090 (a container port and the Service `pi-durable-platform-metrics`), and no NetworkPolicy lets anyone reach it. Add `components/monitoring` and patch the `from` of its NetworkPolicy to name your scraper: see [Metrics and tracing](/docs/operate/metrics-and-tracing). Tracing is a setting (`OTEL_EXPORTER_OTLP_ENDPOINT` in the ConfigMap), plus an egress rule for the platform's pods if the collector is in the cluster or on a private address.
+
+## How it stays in step with the chart
+
+The base, the SandboxTemplate and the components are **generated from the chart**. Only the kustomization files, the overlays' small patches (the launcher's settings and Role) and the platform namespace are written by hand. The repository's checks fail when a generated file is stale, and render every overlay and example and the chart with matching values, then compare every object: the same Role rules, the same NetworkPolicies, the same Deployment. To change the base, the maintainers change the chart first and regenerate.

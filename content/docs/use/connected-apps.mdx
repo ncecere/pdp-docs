@@ -27,7 +27,7 @@ If the app published a logo, it shows beside its name on this page, in **Connect
 - The logo must be on a public `https` address, with no redirects, and at most 256 KiB.
 - It must be a PNG, JPEG, GIF or WebP, checked by its bytes. SVG isn't accepted.
 - The platform keeps it for an hour, so a new logo can take that long to show.
-- If there is no usable logo, you see the app's initials instead.
+- If there is no usable logo, you see the app's initials instead. On a platform that runs several replicas you may see them on some requests even when the logo is fine.
 
 ## What an app can do
 
@@ -52,6 +52,7 @@ Your account menu › **Connected apps** lists the apps you allowed, with when y
 - The app's access tokens last an hour; it refreshes them itself.
 - A refresh token lasts 30 days and is replaced every time it's used, so an app you use at least monthly stays connected until you disconnect it.
 - If an old refresh token is used again more than 30 seconds after it was replaced, the platform treats it as stolen and ends the connection. You connect again.
+- If your platform admins limit sign-in to identity provider groups, and your account is found to be no longer in one, your connected apps are disconnected. Once you can sign in again, connect them again.
 
 ## Who else can see them
 

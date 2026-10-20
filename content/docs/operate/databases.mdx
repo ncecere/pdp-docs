@@ -51,11 +51,21 @@ The agent's role owns only its schema and has no rights on any other, so one age
 
 Each runtime gets a connection URL built from `AGENTS_DATABASE_URL`: the same host, database and TLS settings (`sslmode` and so on), with the agent's own role and password. If agent pods reach PostgreSQL by another address than the platform (another DNS name, a pooler), set `AGENTS_RUNTIME_DATABASE_HOST` to that `host:port`.
 
-A runtime holds **one** connection for its lifetime and takes a PostgreSQL advisory lock on it: that's how a single runtime owns an agent. Don't put a transaction-mode connection pooler between runtimes and PostgreSQL, since session-level advisory locks need a session.
+A runtime holds **one** connection for its lifetime, and that connection's session is how a single runtime owns an agent: the owner is recorded in a table in the agent's own schema (see [Who owns an agent](#who-owns-an-agent)). Don't put a transaction-mode connection pooler between runtimes and PostgreSQL: ownership needs a session that lasts, and each runtime's session must be visible in `pg_stat_activity`. A runtime refuses to start when its own session isn't visible there, which is the case when the server has `track_activities` off. It's on by default.
+
+### Who owns an agent
+
+One runtime at a time writes for an agent, and a replacement takes over as soon as the owner is gone, whether it crashed, lost its connection or was terminated. The runtime keeps a one-row table, `pdp_ownership`, in the agent's schema. It records the owner's database session. To take ownership, a runtime locks that row, then checks whether the recorded session still exists. If it does, the runtime refuses to start and the platform tries again. If not, it records itself as the owner. A clean stop clears the record.
+
+Because the record is in the agent's own schema, only that agent's role can write it. Another agent's role gets "permission denied" on the table and can't block, take or change the ownership of an agent that isn't its own. The agent's own role can of course change its own record and data.
+
+The runtime creates the table itself, with the agent's own role, the first time a runtime of this version starts the agent. There is nothing to migrate: agents move as they next wake.
+
+While runtimes of an older release may still run (an old pod during a rollout, or an agent woken with an old image), the new runtime also takes the older release's advisory lock on its connection, and refuses to start if a session of the agent's own role holds it. A holder running as any other role is ignored. The older lock stays until no older runtime is left.
 
 ### Size
 
-Each agent's schema holds about 25 tables and indexes. That's fine for thousands of agents. Count connections: one per running agent, plus the platform's pools.
+Each agent's schema holds about 25 tables and indexes. That's fine for thousands of agents. Count connections: one per running agent, plus the platform's pools. Each platform replica also holds a connection that listens for thread events and takes short-lived ones for its locks: see [Running several replicas](/docs/operate/replicas#postgresql-connections).
 
 ## Clean-up
 
@@ -66,9 +76,26 @@ pi-durable-platform prune-agent-storage --dry-run   # list them
 pi-durable-platform prune-agent-storage             # remove them
 ```
 
-Run it while no agents are being created. It only considers schemas in the agents database `AGENTS_DATABASE_URL` names; roles of a dropped agents database must be removed by hand.
+Run it while no agents are being created. It only considers schemas in the agents database `AGENTS_DATABASE_URL` names.
+
+### Roles left by a dropped agents database
+
+A role outlives the database it was made for. If you drop or recreate the agents database, its agents' roles stay on the server. `doctor`'s `agents roles` check lists them (see [Doctor and health checks](/docs/operate/doctor-and-health#the-agent-roles-check)), and `prune-roles` drops them:
+
+```sh
+pi-durable-platform prune-roles --dry-run   # list what would be dropped, and what is kept and why
+pi-durable-platform prune-roles             # drop them
+```
+
+Run it while no agents are being created, with `--dry-run` first. The platform marks each role it creates with a comment naming its agents database. `prune-roles` drops a role only when it:
+
+- is named like an agent's (`agent_…`), belongs to no agent in the platform database, and has no schema in the agents database;
+- is a login role made the way the platform makes them: no privileged attributes and no memberships, managed by the provisioning role, and not marked for another agents database;
+- has no open sessions.
+
+It never forces anything: no `DROP OWNED` and no `CASCADE`. If PostgreSQL finds that the role still owns objects, or has privileges, in any database, the role is kept and listed with the reason. That protects a live agent of another installation on a shared server, which owns its schema in another database. Roles made before the comment existed carry no mark, and are still considered: only those that own nothing can go.
 
 ## Known limits
 
-- PostgreSQL advisory locks are database-wide: a role in the agents database could take another agent's lock key and stop it from starting. That's acceptable while agents run only reviewed templates; it is why agents can't run uploaded code yet.
+- Agents' roles share the server's connection and CPU capacity: there are no per-role quotas beyond the connection limit, and any role can see that other roles' sessions exist (`pg_stat_activity` shows user names and process IDs). A hostile agent could still be a noisy neighbour. That's acceptable while agents run only reviewed templates; it is part of why agents can't run uploaded code yet.
 - Every commit is a network round trip to PostgreSQL. Place runtimes and the database close together.
